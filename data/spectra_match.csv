@@ -1,0 +1,20 @@
+polymer,match,orig,conservative,extreme,type
+PEST + mix,60-69,4,3,0,C
+PNMA,60-69,1,0,0,C
+PA,60-69,1,1,0,C
+PE,60-69,1,1,1,C
+PA,70-79,1,1,0,P
+PNMA,70-79,2,2,0,C
+PP,70-79,1,1,1,C
+PEST + mix,70-79,1,1,0,C
+other,70-79,2,2,2,B
+EVA,80-89,1,1,0,P
+PEST + mix,80-89,1,0,0,C
+PUR,80-89,2,2,2,P
+PMA,80-89,3,3,3,P
+PET,80-89,2,2,2,P
+other,80-89,2,2,2,P
+PMA,90-100,3,3,3,P
+PP,90-100,2,2,2,P
+PET,90-100,1,1,1,P
+other,90-100,1,1,1,P

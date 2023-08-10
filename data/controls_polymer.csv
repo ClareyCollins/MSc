@@ -1,0 +1,17 @@
+polymer,type,total
+PEST,Procedural Control - composite,3
+PEST,Atmospheric Control - composite,15
+PNMA,Atmospheric Control - plastic,1
+PNMA,Atmospheric Control - composite,9
+PNMA,Procedural Control - composite,1
+PEST-mix,Procedural Control - composite,9
+other,Atmospheric Control - composite,6
+other,Procedural Control - composite,2
+other,Procedural Control - plastic,1
+PET,Atmospheric Control - plastic,6
+EVA,Procedural Control - plastic,2
+EVA,Atmospheric Control - plastic,2
+PVC,Atmospheric Control - plastic,1
+PA,Procedural Control - composite,1
+PE,Atmospheric Control - composite,1
+PMA,Atmospheric Control - composite,1

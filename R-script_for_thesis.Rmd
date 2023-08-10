@@ -1,0 +1,2966 @@
+---
+title: "MSc by Thesis-Rscript"
+author: "Clare Collins"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+# R script structure and packages
+
+Single \# is a print of the console
+
+Double \## are my notes
+
+Assumes this markdown file is saved in the root folder, data is saved in ./data and items are written out to ./outputs
+
+To shorten the knitted document, only published plots and visual comparisons will show up, everything else can be run through R, but the markdown is set not to show the results within the markdown document ", include=FALSE".
+
+## Install required packages
+
+```         
+    install.packages("tidyverse") (includes ggplot2 and dplyr)
+    install.packages("ggpubr")  ## for ggarrange - arranging plots and checking for normality - recommended by <http://www.sthda.com/english/wiki/normality-test-in-r#check-your-data> and <https://www.datanovia.com/en/lessons/normality-test-in-r/> 
+    install.packages("rempsyc") ##for publication standard tables see <https://rempsyc.remi-theriault.com/articles/t-test> used for getting data from many variables into a data frame, not for presenting final results
+    install.packages("magittr")
+    install.packages("knitr") ##to create markdown document
+    install.packages("car")
+    install.packages("ggsignif")
+    install.packages("grid")
+    install.packages("devtools")
+    devtools::install_github("thomasp85/patchwork") # patches plots together, like ggarrange, but quickly
+    install.packages("ggtext")
+    install.packages("patchwork")
+    install.packages("egg") ## to layer graphs...but stops ggarrange, so remove where issues arise
+    
+```
+
+## Load packages
+
+```{r load-packages, include = FALSE}
+##See section above for notes on why each package is needed
+    library(ggpubr)
+    library(rempsyc)
+    library(magrittr)
+    library(knitr)
+    library(car)
+    library(ggsignif)
+    library(grid)
+    library(devtools)
+    library(ggtext)
+    library(patchwork)
+    library(tidyverse)
+    theme_set(theme_classic()) ##set theme
+    
+    ## egg will be loaded and unloaded in the chunk that needs it as it affects ggarrange used elsewhere
+```
+
+## References for R and packages used
+
+Citation and references - Bibtex for importing to Zotero
+
+```{r citations, include=FALSE}
+
+
+#Base R
+print(toBibtex(citation()))
+
+##All other packages
+## List of packages
+packages_list <- c("tidyverse", "ggplot2", "dplyr","ggpubr", "rempsyc", "magrittr", "knitr", "car", "ggsignif", "grid", "ggtext", "patchwork")
+
+## Create an empty character vector to store BibTeX entries
+bibtex_entries <- character()
+
+for (pkg in packages_list) {
+  bib_entry <- capture.output(toBibtex(citation(pkg)))
+  bibtex_entry <- paste(bib_entry, collapse = "\n")
+  bibtex_entries <- c(bibtex_entries, bibtex_entry, "\n")
+}
+
+# Combine all BibTeX entries into a single BibTeX string
+bibtex_string <- paste(bibtex_entries, collapse = "")
+
+# Print the BibTeX string
+cat(bibtex_string)
+
+```
+
+# Literature Data
+
+## Recent Interest in MPs
+
+### Import data "WoK_RelPubFishMPs.csv" and sort
+
+```{r import WOK_RelPubFishMPs.csv, include = FALSE}
+
+Publication_Relative_Numbers <- read.csv(file("./data/WOK_RelPubFishMPs.csv"))
+
+str(Publication_Relative_Numbers) ##shows data frame structure including integers, numbers, factors
+
+##Change Relative_Publications column from chr to num
+Publication_Relative_Numbers$Relative_Publications <- as.numeric(Publication_Relative_Numbers$Relative_Publications)
+
+##Change Year column from int to num to help display labels correctly
+Publication_Relative_Numbers$Year <- as.numeric(Publication_Relative_Numbers$Year)
+
+
+```
+
+### Figure 1: Microplastics publications have increased more than the general publication rate
+
+Create barchart to identify whether Microplastics publications have increased themselves, or inline with the increase in publication rate in general
+
+Topic search "( \*plastic OR \*plastics ) AND fish\* AND ( ingest\* OR consum\* )" within Web of Knowledge for Years 1933 (start)-2022 (end) Searched 2023-06-22 (n= 2367 in 135 categories) then refined by the top two WoK categories (Environmental Sciences (n= 1317 publications) and Marine Freshwater Biology (n= 705 publications)) compared to all publications in those categories 1,724,817 and 387,288 respectively per year to assess whether there is a relative increase in microplastics publications when considering the actual increase in all publications. No data before 1983 so this is the first year. No microplastics fish ingestion papers before 1990 so maybe worth limiting to this.
+
+```{r barchart_publications, warning=FALSE}
+
+  ggplot(Publication_Relative_Numbers, aes(x = Year, y = Relative_Publications))+
+    geom_col(aes(fill=Category), colour="black", position = "dodge") + 
+    scale_fill_viridis_d()+
+    scale_y_continuous(expand = c(0,0), labels = scales::percent)+
+    ylab("Proportion of publications\non fish ingesting plastics\n")+
+    xlab("\nPublication Year")+
+    xlim(2000,2023)+
+    theme(
+        axis.ticks = element_line(colour = NA),
+        axis.title.x = element_text(size = rel(1.1)),
+        axis.title.y = element_text(size = rel(1.1)),
+        legend.position = "top",
+        legend.title = element_blank())
+```
+
+Many failed attempts to get each year to be displayed on x axis using scale_x\_continuous and breaks; Google and ChatGPT suggest these should work and are not providing other solutions, but they're not, unsure why; also unsure why if I limit the years to 2022, the MFB data isn't showing.
+
+Export png size = 750 x 300
+
+## Figure 3: Antarctica Tourism increase
+
+```{r Antarctica_tourism, include = FALSE}
+## packages required: ggplot2 (tidyverse), grid and egg
+
+library(egg)
+
+tourism <- (read.csv(file("./data/antarctic_cruises.csv")))
+
+plot1 <- ggplot(tourism,
+                aes(tourist.season, 
+                    voyages, 
+                    fill=event))+
+  geom_col(position = 'dodge')+
+  xlab("Tourist season")+
+  ylab("Number of voyages")+
+  theme(axis.title.y = element_text(size=11, 
+                                    margin = margin(r = 10, l = 10)), ## increase space either side of axis title
+        axis.title.x = element_text(size=11, 
+                                    margin = margin(t = 10, b = 10)), ## set font size and increase space around axis title
+        axis.text.y = element_text(size=11),
+        axis.text.x=element_text(size = 8, 
+                                 angle = 90, 
+                                 vjust = 0.5),
+        legend.title = element_text(size = 11),
+        legend.text = element_text(size=9))+
+  scale_fill_discrete(name = "Visiting",
+                            labels = c("Antarctic \n Region", "South \n Georgia"))
+
+plot2 <- ggplot(tourism,
+                aes(tourist.season, 
+                    totalpassenger, 
+                    group=event, 
+                    colour=event))+
+         geom_line()+
+    ylab("Passengers \n (1000s)")+
+    scale_y_continuous(labels=function(x)x/1000)+
+  theme(axis.title.y = element_text(size=11, 
+                                    margin = margin(r = 10, l = 10)), ## increase space either side of axis title
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y=element_text(size = 11),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 11),
+        legend.text = element_text(size=9)) +
+  scale_colour_discrete(name = "Visiting",
+                      labels = c("Antarctic \n Region", "South \n Georgia"))
+
+tourism <- egg::ggarrange(plot2, plot1, heights = c(0.30, 0.70))
+## Export PNG 600 x 400
+
+detach("package:egg", unload=TRUE) #remove egg as affects ggarrange used elsewhere
+```
+
+```{r tourism-plot}
+tourism
+```
+
+Export png size = 600 x 400
+
+## Figures 7-10: Literature Data: Microplastics ingestion by fish
+
+Load data and libraries
+
+```{r literature-data, include = FALSE}
+
+##Uses packages tidyverse, car, ggpubr and ggsignif
+
+  ##load dataset literature.csv
+  literature<- read.csv(file("./data/literature.csv"))
+  #57 obs. of 25 variables
+```
+
+### Figure 7: Extraction method barplot
+
+```{r Figure7_extraction}
+extract_bar <-  ggplot(literature, aes(Extraction)) +
+    labs(x="Extraction method", ##label x axis
+         y="Papers using method (n=56)")+ ##label y axis
+    geom_bar()+
+    geom_text(aes(label= after_stat(count)), stat="count", nudge_y = -1, colour = "white")+ ##label the count on the bar
+    theme(
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+extract_bar ##export plot at 600x400
+```
+
+Export png size = 600 x 400
+
+### Figure 8 A: Chemicals used for digestion
+
+```{r Figure8A_chemical}
+  
+chemdig_bar <-  
+  ggplot(data=subset(literature, !(ChemicalDigestant =="")), aes(x=ChemicalDigestant))+ ##plot Chemical Digestant but ignoring blank rows as these relate to studies that did not use chemical digestion as a method
+    labs(x="Chemical digestant", ##label x axis
+         y="Papers using chemical\ndigestion (n=41)")+ ##label y axis
+    geom_bar()+
+    scale_x_discrete(limits = c("Potassium hydroxide", "Hydrogen peroxide", "Sodium hydroxide", "Proteinase", "Multi-step"), labels = c("Potassium\nhydroxide", "Hydrogen\nperoxide", "Sodium\nhydroxide", "Proteinase", "Multi-step"))+
+    geom_text(aes(label= after_stat(count)), stat="count", nudge_y = 1, colour = "black")+
+    theme(
+      axis.text.x = element_text(hjust = 0, angle = -45),
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+
+```
+
+### Figure 8 B: Highest temperature used during digestion
+
+```{r Figure8B_temperature, include=FALSE}
+temp_bar <-
+  ggplot(data=subset(literature, !(Temp =="")), aes(x=Temp))+ ##Ignore the blank rows
+    labs(x="Digestion temperature (°C)", ##label x axis
+         y=NULL)+ ##one y axis for the three plots
+    geom_bar()+
+    scale_x_discrete(limits = c("Room Temperature", "35-59°C", "60°C", ">60°C"), labels = c("Room\nTemperature", "35-59°C", "60°C", ">60°C"))+
+    geom_text(aes(label= after_stat(count)), stat="count", nudge_y = 1, colour = "black")+
+    theme(
+      axis.text.x = element_text(hjust = 0, angle = -45),
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+
+```
+
+### Figure 8 C: Digestion duration
+
+```{r Figure8C_duration, include=FALSE}
+
+digdur_bar <-
+  ggplot(data=subset(literature, !(Duration =="")), aes(x=Duration))+ ## remove the blank rows
+    labs(x="Digestion duration", ##label x axis
+         y=NULL)+ ##one y axis for the three plots
+    geom_bar()+
+    scale_x_discrete(limits = c("< 1 day", "1 day", "2-7 days", "8-14 days", ">14 days"))+
+    geom_text(aes(label= after_stat(count)), stat="count", nudge_y = 1, colour = "black")+
+    theme(
+      axis.text.x = element_text(hjust = 0, angle = -45),
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+```
+
+### Compile Figure 8 A-C
+
+```{r CompileFigure8A-C, warning=FALSE}
+Figure8 <- ggarrange (chemdig_bar, temp_bar, digdur_bar, ncol=3, nrow=1, labels = c("A","B","C"), align="h")
+Figure8 ## plot size 900 x 400
+```
+
+Export png size = 900 x 400
+
+### Figure 9A: Control methods employed across studies
+
+```{r Figure9AControlMethods, include=FALSE}
+
+##Create df with methods and frequency (possibly a quicker method of doing this somewhere - including in Excel, but for open science, trying to reduce the data uploading where possible)
+
+##Get counts by summing all but blank cells
+envcon <- sum(literature$EnvironmentControlled != "") #21
+solfilt <- sum(literature$SolutionsFiltered != "") #19
+atmcon <- sum(literature$AtmosphericControl != "") #26
+procon <- sum(literature$ProceduralControl != "") #22
+spike <- sum(literature$SpikeRecovery != "") #4
+
+contr_meth_count <- literature[,c(21:25)] ##create df with just the columns we need
+
+contr_meth_count <- as.data.frame(t(contr_meth_count)) ##transpose ready for counts but as a df rather than a matrix, which is what t usually produces
+
+contr_meth_count$method <- row.names(contr_meth_count) ##insert column with row names
+
+contr_meth_count$count <- c(21, 19, 26, 22, 4) ##insert counts as a column
+
+contr_meth_count <- contr_meth_count[,c(58:59)] ## create final df with just the method name and count columns
+
+rownames(contr_meth_count)<-NULL ##remove row names
+
+## Create plot
+
+controlmeth_bar <-  ggplot(contr_meth_count, aes(method,count)) +
+    labs(x="Contamination control method", ##label x axis
+         y="Papers using method (n=56)")+ ##label y axis
+    geom_col()+
+    coord_cartesian(ylim= c(0,26))+
+    scale_x_discrete(limits = c("EnvironmentControlled", "SolutionsFiltered", "AtmosphericControl", "ProceduralControl", "SpikeRecovery"), labels = c("Environment\nControlled", "Solutions\nFiltered", "Atmospheric\nControl", "Procedural\nControl", "Spike\nRecovery"))+
+    geom_text(aes(label= paste(count)), nudge_y = -0.6, colour = "white")+ ##label the count on the bar
+    theme(
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+controlmeth_bar
+
+```
+
+### Figure 9B: Number of controls employed in each study
+
+```{r Figure9BNumberControls, include=FALSE}
+
+controlnum_bar <-  ggplot(literature, aes(NumberControlMethods)) +
+    labs(x="Number of control methods employed per study",
+         y=NULL)+ ##No y axis as to right of other plot with same axis 
+    geom_bar()+
+    scale_x_discrete(limits = c("No controls", "1 controls", "2 controls", "3 controls", "4 controls", "5 controls"))+
+    coord_cartesian(ylim= c(0,26))+
+    geom_text(aes(label= after_stat(count)), stat="count", nudge_y = -0.5, colour = "white")+ ##label the count on the bar
+    theme(
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+controlnum_bar
+
+```
+
+### Compile Figure 9 A & B
+
+```{r CompileFigure9A-B}
+Figure9 <- ggarrange (controlmeth_bar, controlnum_bar, ncol=2, nrow=1, labels = c("A","B"), align="h")
+Figure9 ## plot size 900 x 400
+```
+
+### Figure 10: Plastic Polymer Confirmation Methods
+
+```{r Figure10_PlasticPolymerConfirmation}
+
+##Create df with method, for partial or all particles and frequency for each (possibly a quicker method of doing this somewhere - including in Excel, but for open science, trying to reduce the data uploading where possible)
+
+##Get counts by summing all but blank cells
+VisAll <- sum(literature$VisualIDOnly == "All") #11
+VisPart <- sum(literature$VisualIDOnly == "Partial") #19
+HNAll <- sum(literature$HotNeedle == "All") #4
+HNPart <- sum(literature$HotNeedle == "Partial") #3
+FTIRAll <- sum(literature$FTIR == "All") #16
+FTIRPart <- sum(literature$FTIR == "Partial") #20
+RamanAll <- sum(literature$Raman == "All") #6
+RamanPart <- sum(literature$Raman == "Partial") #5
+
+PlasticPolymerMethod <- literature[,c(17:20)] ##create df with just the columns we need
+
+PlasticPolymerMethod <- as.data.frame(t(PlasticPolymerMethod)) ##transpose ready for counts but as a df rather than a matrix, which is what t usually produces
+
+PlasticPolymerMethod$method <- row.names(PlasticPolymerMethod) ##insert column with row names
+
+PlasticPolymerMethod2 <- PlasticPolymerMethod ##Create copy of database ready to combine later with rbind
+
+PlasticPolymerMethod$Particles <- c("All", "All", "All", "All") ##insert column with All
+
+PlasticPolymerMethod$count <- c(11, 4, 16, 6) ##insert counts as a column
+
+PlasticPolymerMethod <- PlasticPolymerMethod[,c(58:60)] ## create final df with just the method name and count columns
+
+PlasticPolymerMethod2$Particles <- c("Partial", "Partial", "Partial", "Partial") ##insert column with Partial
+
+PlasticPolymerMethod2$count <- c(19, 3, 20, 5) ##insert counts as a column
+
+PlasticPolymerMethod2 <- PlasticPolymerMethod2[,c(58:60)] ## create final df with just the method name and count columns
+
+rownames(PlasticPolymerMethod)<-NULL ##remove row names
+rownames(PlasticPolymerMethod2)<-NULL ##remove row names
+
+PlasticPolymerMethod <- rbind(PlasticPolymerMethod, PlasticPolymerMethod2)
+
+## Create plot
+
+polymerconf_bar <-  ggplot(PlasticPolymerMethod, aes(method,count, fill = Particles)) +
+    labs(x="Plastic polymer identification method", ##label x axis
+         y="Papers using method (n=56)")+ ##label y axis
+    geom_col()+
+    scale_x_discrete(limits = c("VisualIDOnly", "HotNeedle", "FTIR", "Raman"), labels = c("Visual Only", "Hot Needle", "FTIR", "Raman"))+
+    geom_label(aes(label= paste(count)), position = position_stack(vjust = 0.5), colour = "black", fill="white", label.padding=unit(0.15, "lines"), label.r=unit(0, "lines"), label.size = 0)+ ##label the count on the bar with a white background, no curved corners or border
+  scale_fill_viridis_d(option="D")+
+    theme(
+      axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+      axis.title.x = element_text(margin = margin(t = 10)))  # increase space between axis labels and title
+polymerconf_bar  ##export plot at 600x400
+```
+
+# Thesis Data: Import and subset data
+
+Fish and plastic particles data.
+
+Create factors for Kruskal-Walis later (weight, mouth area and species specific condition).
+
+Separate data for the different contamination control quantification, species and locations.
+
+## Import data "sample_summary.csv" and sort
+
+```{r import-sample_summary.csv, include=FALSE}
+DFsummary <- read.csv(file("./data/sample_summary.csv"))
+
+str(DFsummary) ##shows data frame structure including integers, numbers, factors
+
+##Change event column from int to chr
+DFsummary$event <- as.character(DFsummary$event)
+
+##Change length_mm and girth_mm from int to num
+DFsummary$length_mm <- as.numeric(DFsummary$length_mm)
+DFsummary$girth_mm <- as.numeric(DFsummary$girth_mm)
+
+##Change heart_g and liver_g from chr to num
+DFsummary$heart_g <- as.numeric(DFsummary$heart_g)
+DFsummary$liver_g <- as.numeric(DFsummary$liver_g)
+
+
+DFsummary$normgut <- DFsummary$gut_g / DFsummary$weight_g ##add a new column 'normgut' where gut weight is divided by wet weight
+## Rank normgut weight
+DFsummary$gutrank <- rank(DFsummary$normgut)
+
+DFsummary$moutharea <- 3.14 * (DFsummary$hmo_mm / 2) * (DFsummary$vmo_mm / 2) ##add a new column mouth area = pi * (vmo/2) * (hmo/2)
+
+##Create a logical column for whether plastic was present in sample or not
+DFsummary$present <- as.logical(DFsummary$total_plastic_particles)
+
+####Subset data
+
+## separate fish and controls
+
+## create dataset with fish samples only
+DFsummaryfish <- subset(DFsummary, type == "dig")
+## create dataset with fish original data
+DFsummaryfishorig <- subset(DFsummaryfish, contamination == "original")
+## create dataset with fish conservative correction data
+DFsummaryfishcons <- subset(DFsummaryfish, contamination == "conservative")
+## create dataset with fish extreme correction data
+DFsummaryfishextr <- subset(DFsummaryfish, contamination == "extreme")
+
+
+## create dataset with procedural controls only
+DFsummarypro <- subset(DFsummary, type == "pro")
+## create dataset with atmospheric controls only
+DFsummaryenv <- subset(DFsummary, type == "env")
+
+## create a dataset with fish measurement data only
+DFfishmeasure <- subset(DFsummaryfishorig, plastic.composite == "plastic", select=c('sample',	'event',	'species', 'length_mm',	'girth_mm',	'gapetosnout_mm',	'vmo_mm',	'hmo_mm',	'weight_g',	'gut_g',	'stomach_fullness_index',	'heart_g',	'liver_g',	'condition', 'normgut', "moutharea"
+))
+
+##Add a length in cm column
+DFfishmeasure$length_cm <- DFfishmeasure$length_mm / 10
+
+##Add a weight category column to use size metrics as a factor
+## Understand the spread of data
+summary(DFfishmeasure$weight_g)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 28.7   107.0   125.1   123.0   144.0   209.8
+
+##Check factor with 5 equally spaced levels
+weightfactor = cut(DFfishmeasure$weight_g, 5)
+table(weightfactor)
+# (28.5,64.9]  (64.9,101]   (101,137]   (137,174]   (174,210] 
+# 2           7          21          11           2
+
+##add column to DFfishmeasure in g
+DFfishmeasure$weight_factor <- cut(DFfishmeasure$weight_g, 5, labels = c("28.5-64.9","64.9-101","101-137", "137-174", "174-210"))
+str(DFfishmeasure)
+
+##Add a mouth area category column to use size metrics as a factor
+## Understand the spread of data
+summary(DFfishmeasure$moutharea)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 132.6   297.1   426.4   572.1   681.8  1569.2
+
+##Check factor with 6 equally spaced levels
+mouthareafactor = cut(DFfishmeasure$moutharea, 6)
+table(mouthareafactor)
+# (131,372]           (372,611]           (611,851]      (851,1.09e+03] (1.09e+03,1.33e+03] (1.33e+03,1.57e+03] 
+# 15                  15                   6                   1                   3                   3 
+
+##add moutharea category column to DFfishmeasure (changed to cm^2)
+DFfishmeasure$mouthareafactor <- cut(DFfishmeasure$moutharea, 6, labels = c("1.31-3.72","3.72-6.11","6.11-8.51", "8.51-10.90", "10.90-13.30", "13.30-15.70"))
+str(DFfishmeasure)
+
+##per location
+DFfishmeasure13 <- subset(DFfishmeasure, event == "13")
+DFfishmeasure26 <- subset(DFfishmeasure, event == "26")
+DFfishmeasure53 <- subset(DFfishmeasure, event == "53")
+
+##ANI measurements
+DFfishmeasureani <- subset(DFfishmeasure, species == "ANI")
+
+##add a condition category per species to use as a factor
+##For ANI
+## Understand the spread of data
+summary(DFfishmeasureani$condition)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.6913  0.7691  0.8239  0.8207  0.8580  1.0392
+
+##Check factor with 5 equally spaced levels
+aniconditionfactor = cut(DFfishmeasureani$condition, 5)
+table(aniconditionfactor)
+# (0.691,0.761]  (0.761,0.83]    (0.83,0.9]    (0.9,0.97]   (0.97,1.04] 
+# 4             9             6             2             1
+
+##add condition category column to DFfishmeasureani
+DFfishmeasureani$condition_factor <- cut(DFfishmeasureani$condition, 5, labels = c("0.69-0.76","0.76-0.83","0.83-0.90", "0.90-0.97", "0.97-1.04"))
+str(DFfishmeasureani)
+
+##per location
+DFfishmeasureani13 <- subset(DFfishmeasureani, event == "13")
+DFfishmeasureani26 <- subset(DFfishmeasureani, event == "26")
+##NOG measurements
+DFfishmeasurenog <- subset(DFfishmeasure, species == "NOG")
+
+##For NOG
+## Understand the spread of data
+summary(DFfishmeasurenog$condition)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.9346  1.2253  1.2854  1.2511  1.3467  1.5177
+
+##Check factor with 5 equally spaced levels
+nogconditionfactor = cut(DFfishmeasurenog$condition, 5)
+table(nogconditionfactor)
+# (0.934,1.05]  (1.05,1.17]  (1.17,1.28]   (1.28,1.4]   (1.4,1.52] 
+# 3            1            6           10            1
+
+##add condition category column to DFfishmeasurenog
+DFfishmeasurenog$condition_factor <- cut(DFfishmeasurenog$condition, 5, labels = c("0.93-1.05","1.05-1.17","1.17-1.28", "1.28-1.40", "1.40-1.52"))
+str(DFfishmeasurenog)
+
+##per location
+DFfishmeasurenog13 <- subset(DFfishmeasurenog, event == "13")
+DFfishmeasurenog26 <- subset(DFfishmeasurenog, event == "26")
+DFfishmeasurenog53 <- subset(DFfishmeasurenog, event == "53")
+
+## separate species data to plot both
+## create dataset with ANI fish
+DFsummaryani <- subset(DFsummaryfish, species == "ANI")
+
+## create dataset with ANI original data
+DFsummaryaniorig <- subset(DFsummaryani, contamination == "original")
+## create dataset with ANI conservative correction data
+DFsummaryanicons <- subset(DFsummaryani, contamination == "conservative")
+## create dataset with ANI extreme correction data
+DFsummaryaniextr <- subset(DFsummaryani, contamination == "extreme")
+
+## create dataset with NOG fish
+DFsummarynog <- subset(DFsummaryfish, species == "NOG")
+
+## create dataset with NOG original data
+DFsummarynogorig <- subset(DFsummarynog, contamination == "original")
+## create dataset with NOG conservative correction data
+DFsummarynogcons <- subset(DFsummarynog, contamination == "conservative")
+## create dataset with NOG extreme correction data
+DFsummarynogextr <- subset(DFsummarynog, contamination == "extreme")
+
+## create dataset of Event 13 fish
+DFsummary13 <- subset(DFsummaryfish, event == "13")
+## create dataset with ev13 original data
+DFsummary13orig <- subset(DFsummary13, contamination == "original")
+## original data ev13 by species
+DFsummary13origANI <- subset(DFsummary13orig, species == "ANI")
+DFsummary13origNOG <- subset(DFsummary13orig, species == "NOG")
+## create dataset with ev13 conservative correction data
+DFsummary13cons <- subset(DFsummary13, contamination == "conservative")
+## create dataset with ev13 extreme correction data
+DFsummary13extr <- subset(DFsummary13, contamination == "extreme")
+
+## create dataset of Event 26 fish
+DFsummary26 <- subset(DFsummaryfish, event == "26")
+## create dataset with ev26 original data
+DFsummary26orig <- subset(DFsummary26, contamination == "original")
+## original data ev13 by species
+DFsummary26origANI <- subset(DFsummary26orig, species == "ANI")
+DFsummary26origNOG <- subset(DFsummary26orig, species == "NOG")
+## create dataset with ev26 conservative correction data
+DFsummary26cons <- subset(DFsummary26, contamination == "conservative")
+## create dataset with ev26 extreme correction data
+DFsummary26extr <- subset(DFsummary26, contamination == "extreme")
+
+## create dataset of Event 26 and 53 (North West) fish
+DFsummaryNW <- subset(DFsummaryfish, event %in% c("26", "53"))
+## create dataset with evNW original data
+DFsummaryNWorig <- subset(DFsummaryNW, contamination == "original")
+## create dataset with evNW conservative correction data
+DFsummaryNWcons <- subset(DFsummaryNW, contamination == "conservative")
+## create dataset with evNW extreme correction data
+DFsummaryNWextr <- subset(DFsummaryNW, contamination == "extreme")
+```
+
+## Import data "particle_data.csv" and sort
+
+```{r import-particle_data.csv, include=FALSE}
+DFparticles <- read.csv(file("./data/particle_data.csv"))
+
+##Change event column from int to chr
+DFparticles$event <- as.character(DFparticles$event)
+
+##Change sample column from int to chr
+DFparticles$sample <- as.character(DFparticles$sample)
+
+##subset fish and controls
+DFparticlesfish <- subset(DFparticles, fp_type == "dig")
+DFparticlespro <- subset(DFparticles, fp_type == "pro")
+DFparticlesenv <- subset(DFparticles, fp_type == "env")
+```
+
+## Import data "control_summaries.csv" and sort
+
+```{r import-control_summaries.csv, include=FALSE}
+##plastics on control papers combined (plastics and composites)
+DFcontrolsumm <- read.csv(file("./data/control_summaries.csv"))
+##Change event column from int to chr
+DFcontrolsumm$event <- as.character(DFcontrolsumm$event)
+```
+
+## Import data "sample_summary_combinedplastic.csv" and sort
+
+This data is where plastics and composites are counted together rather than separated, so total count is the combined total
+
+```{r import-sample_summary_combinedplastic.csv, include=FALSE}
+##plastics in fish combined (plastics and composites)
+DFsummarycombined <- read.csv(file("./data/sample_summary_combinedplastic.csv"))
+##Change event column from int to chr
+DFsummarycombined$event <- as.character(DFsummarycombined$event)
+## create dataset with ANI original data (without contamination correction)
+DFsummarycombinedorig <- subset(DFsummarycombined, contamination == "original")
+```
+
+# Fish Measurement Data Analysis
+
+1.  Explore fish measurements, summarising, checking assumptions and plotting.
+
+2.  Look at the plastics in the fish.
+
+3.  Look at relationships between plastics ingested and fish species, locations and measurements
+
+## Fish measurements
+
+First plotting lengths to show similarity across locations and species
+
+### Figure 16 - Boxplot lengths across locations and species
+
+```{r boxplot_length, include = FALSE}
+
+##facet wrap
+lengthwrap <- filter(DFfishmeasure, length_cm != "", species != "", event != "")
+lengthcount <- count(lengthwrap, length_cm, event, species)
+glimpse(lengthcount)
+lengthcount <- filter(lengthcount, species%in%c("ANI", "NOG")) %>%
+  mutate(species = factor(species, levels = c("ANI", "NOG")))
+
+##subset lengthcount per location
+lengthcount53NW <- subset(lengthcount, event == 53)
+lengthcount26W <- subset(lengthcount, event == 26)
+lengthcount13SE <- subset(lengthcount, event == 13)
+
+## create boxplots for ggarrange
+
+boxSElength <- 
+  ggplot(lengthcount13SE, aes(group = species, 
+                          fill=species,
+                          y = length_cm, 
+                          factor(species,
+                                  labels = c("C. gunnari", "G. gibberifrons")))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("C. gunnari", "G. gibberifrons"))+
+ 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Length (cm)')+ ##y axis label
+  ylim(10,30)+
+  theme(
+    axis.text.x = element_text(size = rel(1.2)),
+    axis.text.y = element_text(size = rel(1.5)),
+    legend.text = element_text(size = rel(1.3)),
+    legend.title = element_text(size = rel(1.2)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(1.2)) ## increase space between axis labels and axis title
+      
+  )+
+  ggtitle("Southeast")
+boxWlength <- 
+  ggplot(lengthcount26W, aes(group = species, 
+                          fill=species,
+                          y = length_cm, 
+                          factor(species,
+                                  labels = c("C. gunnari", "G. gibberifrons")))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("C. gunnari", "G. gibberifrons"))+
+ 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Length (cm)')+ ##y axis label
+  ylim(10,30)+
+  theme(
+    axis.text.x = element_text(size = rel(1.2)),
+    axis.text.y = element_text(size = rel(1.5)),
+    legend.text = element_text(size = rel(1.3)),
+    legend.title = element_text(size = rel(1.2)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(1.2)) ## increase space between axis labels and axis title
+      
+  )+
+  ggtitle("West")
+boxNWlength <-
+  ggplot(lengthcount53NW, aes(group = species, 
+                          fill=species,
+                          y = length_cm, 
+                          factor(species,
+                                  labels = c("G. gibberifrons")))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("NOG"="#B8DE29"), name = "Species", labels = c("G. gibberifrons"))+
+   stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Length (cm)')+ ##y axis label
+  ylim(10,30)+
+  theme(
+    axis.text.x = element_text(size = rel(1.2)),
+    axis.text.y = element_text(size = rel(1.5)),
+    legend.text = element_text(size = rel(1.3)),
+    legend.title = element_text(size = rel(1.2)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(1.2)) ## increase space between axis labels and axis title
+      
+  )+
+  ggtitle("Northwest")
+  
+boxloclength <- ggarrange (boxSElength, boxWlength, boxNWlength, ncol=3, nrow=1, labels = c("A","B","C"), common.legend = TRUE, legend = "bottom")
+
+```
+
+```{r display-boxloclength}
+boxloclength
+```
+
+### Table 7 T-tests
+
+The morphometric data was checked for normality using visual (histogram, density plots and QQplots) and statistical (Shapiro-Wilks) methods and for homoscedasticity using Bartlett's test. Fish measurements were then checked between species for differences, visually using boxplots and 1460 statistically using the Student t-test (for normally distributed and homoscedastic data), Welch's t-test (for normally distributed heteroscedastic data) or a Mann-Whitney U/ Wilcoxon Rank Sum test (for not normally distributed, but similarly distributed data, examined visually using histograms).
+
+#### Check visually for normal distribution of fish measurements per species
+
+Histograms plots species measurements:
+
+```{r fishmeasure-histograms, warning = FALSE, message = FALSE}
+
+## Set up multiple plots side by side with histogram to check for bell-shape
+hislen <- ggplot(DFfishmeasure, aes(x = length_cm, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Length (cm)")
+hiswei <- ggplot(DFfishmeasure, aes(x = weight_g, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Weight (wet)")
+hisma <- ggplot(DFfishmeasure, aes(x = moutharea, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Mouth Area")
+hisgut <- ggplot(DFfishmeasure, aes(x = gut_g, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight (wet)")
+hisg2s <- ggplot(DFfishmeasure, aes(x = gapetosnout_mm, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout")
+hisvmo <- ggplot(DFfishmeasure, aes(x = vmo_mm, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening")
+hishmo <- ggplot(DFfishmeasure, aes(x = hmo_mm, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening")
+hissfi <- ggplot(DFfishmeasure, aes(x = stomach_fullness_index, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+hishea <- ggplot(DFfishmeasure, aes(x = heart_g, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+hiscon <- ggplot(DFfishmeasure, aes(x = condition, fill = species, colour = species)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (hislen, hiswei, hisma, hisgut, hisg2s, hisvmo, hishmo, hissfi, hishea, hiscon, ncol=5, nrow=2, labels = c("A","B","C","D","E","F", "G", "H", "I","J"), common.legend = TRUE, legend = "bottom")
+```
+
+Density plots species measurements
+
+```{r fishmeasure-density, warning = FALSE}
+####### Density Plots Fish Measurements-------
+denlen <- ggplot(DFfishmeasure, aes(x=length_cm, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Length")
+denwei <- ggplot(DFfishmeasure, aes(x=weight_g, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Wet weight")
+denma <- ggplot(DFfishmeasure, aes(x=moutharea, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Mouth Area")
+dengut <- ggplot(DFfishmeasure, aes(x=gut_g, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight(wet)")
+deng2s <- ggplot(DFfishmeasure, aes(x=gapetosnout_mm, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout length")
+denvmo <- ggplot(DFfishmeasure, aes(x=vmo_mm, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening length")
+denhmo <- ggplot(DFfishmeasure, aes(x=hmo_mm, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening length")
+densfi <- ggplot(DFfishmeasure, aes(x = stomach_fullness_index, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+denhea <- ggplot(DFfishmeasure, aes(x = heart_g, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+dencon <- ggplot(DFfishmeasure, aes(x = condition, fill = species, colour = species)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (denlen, denwei, denma, dengut, deng2s, denvmo, denhmo, densfi, denhea, dencon, ncol=5, nrow=2, labels = c("A","B","C","D","E","F", "G", "H", "I", "J"), common.legend = TRUE, legend = "bottom")
+
+
+```
+
+QQplots species measurements
+
+```{r fishmeasure-qqplot, warning=FALSE}
+####### QQ plot Fish Measurements -------
+qqlen <- ggplot(DFfishmeasure, aes(sample=length_cm, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Length")
+qqwei <- ggplot(DFfishmeasure, aes(sample=weight_g, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Weight(wet)")
+qqma <- ggplot(DFfishmeasure, aes(sample=moutharea, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Mouth Area")
+qqgut <- ggplot(DFfishmeasure, aes(sample=gut_g, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gut weight (wet)")
+qqg2s <- ggplot(DFfishmeasure, aes(sample=gapetosnout_mm, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gape to Snout Length")
+qqvmo <- ggplot(DFfishmeasure, aes(sample=vmo_mm, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Vertical mouth opening")
+qqhmo <- ggplot(DFfishmeasure, aes(sample=hmo_mm, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Horizontal mouth opening")
+qqsfi <- ggplot(DFfishmeasure, aes(sample=stomach_fullness_index, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Stomach Fullness Index")
+qqhea <- ggplot(DFfishmeasure, aes(sample=heart_g, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Heart weight")
+qqcon <- ggplot(DFfishmeasure, aes(sample=condition, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (qqlen, qqwei, qqma, qqgut, qqg2s, qqvmo, qqhmo, qqsfi, qqhea, qqcon, ncol=5, nrow=2, labels = c("A","B","C","D","E","F", "G", "H", "I", "J"), common.legend = TRUE, legend = "bottom")
+
+
+```
+
+#### Checking for normality statistically (Shapiro-Wilks) per species
+
+```{r normaldist-measurements-statistical, include=FALSE}
+
+######Are the fish measurements normally distributed - statistical######
+###### Shapiro-Wilk's Fish Measure per species------
+## Run a significance test: Shapiro-Wilk's method based on correlation between the data and the corresponding normal scores
+shapiro.test(DFfishmeasureani$length_mm)
+# W = 0.86215, p-value = 0.005611  ## not normal
+shapiro.test(DFfishmeasureani$weight_g)
+# W = 0.92191, p-value = 0.08327  ## normal
+shapiro.test(DFfishmeasureani$gut_g)
+# W = 0.81177, p-value = 0.0007693  ## not normal
+shapiro.test(DFfishmeasureani$moutharea)
+# W = 0.89771, p-value = 0.02676 ## not normal
+shapiro.test(DFfishmeasureani$gapetosnout_mm)
+# W = 0.95256, p-value = 0.3546  ## normal
+shapiro.test(DFfishmeasureani$vmo_mm)
+# W = 0.91171, p-value = 0.05131  ## normal
+shapiro.test(DFfishmeasureani$hmo_mm)
+# W = 0.95832, p-value = 0.456  ## normal
+shapiro.test(DFfishmeasureani$stomach_fullness_index)
+# W = 0.88231, p-value = 0.01338  ## not normal
+shapiro.test(DFfishmeasureani$heart_g)
+# W = 0.96703, p-value = 0.6425 ## normal
+shapiro.test(DFfishmeasureani$condition)
+# W = 0.94421, p-value = 0.2415 ## normal
+
+shapiro.test(DFfishmeasurenog$length_mm)
+# W = 0.92569, p-value = 0.1128  ## normal
+shapiro.test(DFfishmeasurenog$weight_g)
+# W = 0.98528, p-value = 0.9803  ## normal
+shapiro.test(DFfishmeasurenog$gut_g)
+# W = 0.96142, p-value = 0.5451  ## normal
+shapiro.test(DFfishmeasurenog$moutharea)
+# W = 0.96784, p-value = 0.6848 ## normal
+shapiro.test(DFfishmeasurenog$gapetosnout_mm)
+# W = 0.9556, p-value = 0.4322  ## normal
+shapiro.test(DFfishmeasurenog$vmo_mm)
+# W = 0.97707, p-value = 0.8781  ## normal
+shapiro.test(DFfishmeasurenog$hmo_mm)
+# W = 0.9729, p-value = 0.7961  ## normal
+shapiro.test(DFfishmeasurenog$stomach_fullness_index)
+# W = 0.76195, p-value = 0.0001816  ## not normal
+shapiro.test(DFfishmeasurenog$heart_g)
+# W = 0.84323, p-value = 0.004113 ## not normal
+shapiro.test(DFfishmeasurenog$condition)
+# W = 0.91151, p-value = 0.0588 ## normal
+```
+
+#### Test for homoscedasticity between species
+
+(equal variance across groups) using Bartlett's test. If p-value \>= 0.05, group measurements are homoscedastic, use var.equal=TRUE in the T Test.
+
+```{r fishmeasure-homoscedascity stats, include=FALSE}
+
+bartlett.test(length_cm ~ species, data = DFfishmeasure)
+# 	Bartlett test of homogeneity of variances
+# 
+# data:  length_cm by species
+# Bartlett's K-squared = 3.0988, df = 1, p-value = 0.07835
+
+bartlett.test(weight_g ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  weight_g by species
+# Bartlett's K-squared = 4.8011, df = 1, p-value = 0.02844 ###NOT HOMOSCEDASTIC
+
+bartlett.test(moutharea ~ species, data = DFfishmeasure)
+# 	Bartlett test of homogeneity of variances
+# 
+# data:  moutharea by species
+# Bartlett's K-squared = 23.825, df = 1, p-value = 1.055e-06 ###NOT HOMOSCEDASTIC
+
+bartlett.test(gut_g ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  gut_g by species
+# Bartlett's K-squared = 0.11696, df = 1, p-value = 0.7324
+
+bartlett.test(gapetosnout_mm ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  gapetosnout_mm by species
+# Bartlett's K-squared = 0.69718, df = 1, p-value = 0.4037
+
+bartlett.test(vmo_mm ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  vmo_mm by species
+# Bartlett's K-squared = 10.528, df = 1, p-value = 0.001176 ###NOT HOMOSCEDASTIC
+
+
+bartlett.test(hmo_mm ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  hmo_mm by species
+# Bartlett's K-squared = 6.1029, df = 1, p-value = 0.0135 ###NOT HOMOSCEDASTIC
+
+bartlett.test(heart_g ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  heart_g by species
+# Bartlett's K-squared = 23.737, df = 1, p-value = 1.104e-06 ###NOT HOMOSCEDASTIC
+
+bartlett.test(condition ~ species, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  condition by species
+# Bartlett's K-squared = 9.1076, df = 1, p-value = 0.002545 ###NOT HOMOSCEDASTIC
+
+```
+
+#### Check for significant differences in measurements between species
+
+using Student t-test for homoscedastic variables and Welch's t-test for heteroscedastic <https://rcompanion.org/rcompanion/d_02.html>.
+
+```{r fishmeasure-ttest-species, include=FALSE}
+
+homosced_ttestresults <- nice_t_test(
+  data = DFfishmeasure,
+  response = names(DFfishmeasure)[4:17],
+  group = "species",
+  var.equal = TRUE,
+  conf.level = 0.95,
+  warning = FALSE)
+##change output to only the homoscedastic variables for student t-test (https://rcompanion.org/rcompanion/d_02.html)
+homosced_ttestresults <- subset(homosced_ttestresults[c(14, 7, 3),])
+homosced_ttestresults
+write.csv(homosced_ttestresults, "outputs/homosced_ttestresults20230623.csv", row.names=FALSE)
+
+heterosced_ttestresults <- nice_t_test(
+  data = DFfishmeasure,
+  response = names(DFfishmeasure)[4:17],
+  group = "species",
+  var.equal = FALSE,
+  conf.level = 0.95,
+  warning = FALSE)
+##change output to only the homoscedastic variables for student t-test (https://rcompanion.org/rcompanion/d_02.html)
+heterosced_ttestresults <- subset(heterosced_ttestresults[c(6, 13, 4, 5, 9),])
+heterosced_ttestresults
+write.csv(heterosced_ttestresults, "outputs/heterosced_ttestresults20230623.csv", row.names=FALSE)
+
+
+```
+
+using MWU for not normally distributed, but similarly distributed data
+
+length, gut length, mouth area, stomach fullness and heart are not normal in at least one species
+
+Checking the shape of the distributions are similar:
+
+```{r MWU-species-similar-dist, include=FALSE}
+histolengthANI <- ggplot(DFfishmeasureani, aes(x = length_cm))+
+  geom_histogram(color="black", fill="white")
+
+histolengthNOG <- ggplot(DFfishmeasurenog, aes(x = length_cm))+
+  geom_histogram(color="black", fill="white")
+
+histogutANI <- ggplot(DFfishmeasureani, aes(x = gut_g))+
+  geom_histogram(color="black", fill="white")
+
+histogutNOG <- ggplot(DFfishmeasurenog, aes(x = gut_g))+
+  geom_histogram(color="black", fill="white")
+
+histomaANI <- ggplot(DFfishmeasureani, aes(x = moutharea))+
+  geom_histogram(color="black", fill="white")
+
+histomaNOG <- ggplot(DFfishmeasurenog, aes(x = moutharea))+
+  geom_histogram(color="black", fill="white")
+
+histosfiANI <- ggplot(DFfishmeasureani, aes(x = stomach_fullness_index))+
+  geom_histogram(color="black", fill="white")
+
+histosfiNOG <- ggplot(DFfishmeasurenog, aes(x = stomach_fullness_index))+
+  geom_histogram(color="black", fill="white")
+
+histoheartANI <- ggplot(DFfishmeasureani, aes(x = heart_g))+
+  geom_histogram(color="black", fill="white")
+
+histoheartNOG <- ggplot(DFfishmeasurenog, aes(x = heart_g))+
+  geom_histogram(color="black", fill="white")
+
+
+ggarrange (histolengthANI, histolengthNOG, histogutANI, histogutNOG, histomaANI, histomaNOG, histosfiANI, histosfiNOG, histoheartANI, histoheartNOG, ncol=2, nrow=5, labels = c("A","B","C","D","E","F","G","H","I","J"), common.legend = TRUE, legend = "bottom")
+```
+
+Fine - run MWU across all non-normal measures:
+
+```{r fishmeasure-wilcox-species, include=FALSE}
+
+wilcoxlength <- wilcox.test(DFfishmeasureani$length_mm, DFfishmeasurenog$length_mm)
+wilcoxlength
+# W = 408, p-value = 1.781e-05
+
+wilcoxgut <- wilcox.test(DFfishmeasureani$gut_g, DFfishmeasurenog$gut_g)
+wilcoxgut
+# W = 104, p-value = 0.001612
+
+wilcoxma <- wilcox.test(DFfishmeasureani$moutharea, DFfishmeasurenog$moutharea)
+wilcoxma
+# W = 436, p-value = 2.223e-08
+
+wilcoxsfi <- wilcox.test(DFfishmeasureani$stomach_fullness_index, DFfishmeasurenog$stomach_fullness_index)
+# W = 335, p-value = 0.007613
+
+wilcoxheart <- wilcox.test(DFfishmeasureani$heart_g, DFfishmeasurenog$heart_g)
+# W = 439, p-value = 3.734e-08
+
+```
+
+All measures, except body weight, are significantly different between species p\<0.05
+
+#### Table 7: Morphometric data showing mean measurements and significant differences (t-test) between species
+
+Despite non-normal distributions, the t-test appears a suitable option following advice from McDonald, John, H. (2014) Handbook of biological statistics. 3rd ed. Maryland: Sparky House Publishing.
+
+"The t-test assumes that the observations within each group are normally distributed. Fortunately, it is not at all sensitive to deviations from this assumption, if the distributions of the two groups are the same (if both distributions are skewed to the right, for example). I've done simulations with a variety of non-normal distributions, including flat, bimodal, and highly skewed, and the two-sample t-test always gives about 5% false positives, even with very small sample sizes." AND "The Mann-Whitney U-test is a non-parametric alternative to the two-sample t-test that some people recommend for non-normal data. However, if the two samples have the same distribution, the two-sample t-test is not sensitive to deviations from normality, so you can use the more powerful and more familiar t-test instead of the Mann-Whitney U-test. If the two samples have different distributions, the Mann-Whitney U-test is no better than the t-test. So there's really no reason to use the Mann-Whitney U-test unless you have a true ranked variable instead of a measurement variable."
+
+So MWU for SFI but others can be checked using t-tests.
+
+##### Means and SD
+
+Provide the means and SD for the t-test results
+
+```{r fishmeasure-meansSD-species, include=FALSE}
+## dataframe of means and sd per species and event per variable ignoring NA values
+fishmeasuremeans_species <- DFfishmeasure %>% group_by(species) %>% summarise(across(c(length_cm, weight_g, moutharea, gut_g, gapetosnout_mm, vmo_mm, hmo_mm, stomach_fullness_index, heart_g, condition),.f = list(mean = mean, sd = sd), na.rm = TRUE), .groups = 'drop')
+##view
+fishmeasuremeans_species
+##export
+write.csv(fishmeasuremeans_species, file = "./outputs/fishmeasuremeans20230623.csv", row.names=FALSE)
+```
+
+#### Figure 17 - Differences in morphometric data across species - visual
+
+Boxplot
+
+```{r fishmeasure-boxplots, include=FALSE}
+## uses ggtext package
+##Boxplots fish measure comparing species
+
+## set label text for all
+fishlabels <- c("C. gunnari", "G. gibberifrons")
+names(fishlabels) <- c("ANI", "NOG")
+
+boxfishlength <- 
+  ggplot(DFfishmeasure, aes(group = species, fill=species, ##group variables as factors
+                           y = length_cm, 
+                           factor(species,
+                                  labels = fishlabels))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+ 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Length (cm)')+ ##y axis label
+  theme(
+    axis.text.x = element_blank(), ## remove species labels as legend at bottom
+    axis.ticks.x = element_blank(), ## remove ticks as no labels
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+  )
+
+boxfishweight <-
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                           y = weight_g, 
+                           factor(species,
+                                  labels = fishlabels))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+    stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Weight (g)')+ ##y axis label
+  theme(
+    axis.text.x = element_blank(), ## remove species labels as legend at bottom
+    axis.ticks.x = element_blank(), ## remove ticks as no labels
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+
+  )
+
+boxfishma <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##one species only as body condition not comparable across species
+                           y = moutharea,
+                           factor(species,
+                                  labels = fishlabels))) +
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+  
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab(bquote('Mouth area '(mm^2)))+ ##y axis label including superscript 2 for squared
+  theme(
+    axis.text.x = element_blank(), ## remove species labels as legend at bottom
+    axis.ticks.x = element_blank(), ## remove ticks as no labels
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+  )
+
+boxfishgut <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                           y = gut_g, 
+                           factor(species,
+                                  labels = fishlabels))) +
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Gut weight (g)')+ ##y axis label
+  scale_y_continuous(limits = c(0,20))+
+  theme(
+    axis.text.x = element_blank(), ## remove species labels as legend at bottom
+    axis.ticks.x = element_blank(), ## remove ticks as no labels
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+  )
+
+barfishsfi <- 
+  ggplot(DFfishmeasure, aes(y = stomach_fullness_index))+
+    geom_bar(aes(fill=species), colour="black") + 
+    scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+    ylab("Stomach\nFullness Index (1-4)")+
+    xlab(NULL)+ ##count is obvious and looks better without
+    theme(
+      axis.text.x = element_text(size = rel(0.8)),
+      axis.text.y = element_text(size = rel(0.8)),
+      axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+      legend.text = element_markdown()
+    )  
+
+boxfishhea <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                            y = heart_g, 
+                            factor(species,
+                                   labels = fishlabels))) +
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_y_continuous(limits = c(0,2.0))+
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Heart weight (g)')+ ##y axis label
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+
+  )
+
+boxfishg2s <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                            y = gapetosnout_mm, 
+                            factor(species,
+                                   labels = fishlabels))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+  
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Gape-Snout\nlength (mm)')+ ##y axis label
+  scale_y_continuous(limits = c(0,50))+
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+)
+
+boxfishvmo <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                            y = vmo_mm, 
+                            factor(species,
+                                   labels = fishlabels
+                                   ))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+    stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Vertical mouth\nopening (mm)')+ ##y axis label
+  scale_y_continuous(limits = c(0,50))+
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+  )
+
+boxfishhmo <- 
+  ggplot(DFfishmeasure, aes(group = species, fill = species, ##group variables as factors
+                            y = hmo_mm, 
+                            factor(species,
+                                   labels = fishlabels))) + ##label species factors 0, 1 as C. gunnari and G. gibberifrons respectively
+  stat_boxplot(geom ='errorbar', width = 0.6) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("ANI" = "#3F4788",
+                               "NOG"="#B8DE29"), name = "Species", labels = c("*C. gunnari*", "*G. gibberifrons*"))+
+    stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('Horizontal mouth\nopening (mm)')+ ##y axis label
+  scale_y_continuous(limits = c(0,50))+
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 5), size = rel(0.8)), ## increase space between axis labels and axis title
+    legend.text = element_markdown()
+  )
+figure16 <- ggarrange (boxfishlength, boxfishweight, boxfishma, boxfishgut, barfishsfi, boxfishhea, boxfishg2s, boxfishvmo, boxfishhmo, ncol=3, nrow=3, labels = c("A","B","C","D","E","F","G","H","I"), align = 'v', common.legend = TRUE, legend = "bottom")
+```
+
+```{r figure16-boxplot-morphometrics}
+plot(figure16)
+## plot size 753 x 553
+```
+
+Median measurements per species
+
+```{r fishmeasure medians, include=FALSE}
+
+## Report the median and IQR for the measurements
+## dataframe of medians and IQR per species per variable ignoring NA values
+fishmeasuremedians <- DFfishmeasure %>% group_by(species) %>% summarise(across(c(length_mm, moutharea, weight_g, gut_g, gapetosnout_mm, vmo_mm, hmo_mm, stomach_fullness_index, heart_g, condition),.f = list(median = median, IQR = IQR), na.rm = TRUE))
+##view
+fishmeasuremedians
+##export
+write.csv(fishmeasuremedians, file = "./outputs/fishmeasuremedians.csv", row.names=FALSE)
+
+```
+
+#### Check for significant differences in fish measurements between locations
+
+The measurements were also checked between locations for differences again visually using boxplots and then statistically using a one-way ANOVA for the normally distributed weight data and a Kruskal-Wallis for the other non-normally distributed morphometric data.
+
+Shapiro-Wilks (normal distribution) locations:
+
+```{r SW-fishmeasure-locations, include=FALSE}
+######Are the fish measurements normally distributed - statistical######
+###### Shapiro-Wilk's Fish Measure per event------
+## Run a significance test: Shapiro-Wilk's method based on correlation between the data and the corresponding normal scores
+shapiro.test(DFfishmeasure13$length_mm)
+# W = 0.76868, p-value = 0.001076  ## not normal
+shapiro.test(DFfishmeasure13$weight_g)
+# W = 0.904, p-value = 0.09316  ## normal
+shapiro.test(DFfishmeasure13$gut_g)
+# W = 0.7095, p-value = 0.0002151  ## not normal
+shapiro.test(DFfishmeasure13$gapetosnout_mm)
+# W = 0.71773, p-value = 0.0002664  ## not normal
+shapiro.test(DFfishmeasure13$vmo_mm)
+# W = 0.92593, p-value = 0.21  ## normal
+shapiro.test(DFfishmeasure13$hmo_mm)
+# W = 0.97275, p-value = 0.881  ## normal
+shapiro.test(DFfishmeasure13$stomach_fullness_index)
+# W = 0.84624, p-value = 0.012  ## not normal
+shapiro.test(DFfishmeasure13$heart_g)
+# W = 0.86084, p-value = 0.02482 ## not normal
+shapiro.test(DFfishmeasure13$condition)
+# W = 0.74129, p-value = 0.0004999 ## normal
+
+shapiro.test(DFfishmeasure26$length_mm)
+# W = 0.91384, p-value = 0.07547  ## normal
+shapiro.test(DFfishmeasure26$weight_g)
+# W = 0.95184, p-value = 0.3959  ## normal
+shapiro.test(DFfishmeasure26$gut_g)
+# W = 0.97328, p-value = 0.822  ## normal
+shapiro.test(DFfishmeasure26$gapetosnout_mm)
+# W = 0.87897, p-value = 0.01696  ## not normal
+shapiro.test(DFfishmeasure26$vmo_mm)
+# W = 0.92439, p-value = 0.1204  ## normal
+shapiro.test(DFfishmeasure26$hmo_mm)
+# W = 0.89276, p-value = 0.03023  ## not normal
+shapiro.test(DFfishmeasure26$stomach_fullness_index)
+# W = 0.85555, p-value = 0.006612  ## not normal
+shapiro.test(DFfishmeasure26$heart_g)
+# W = 0.84389, p-value = 0.004218 ## not normal
+shapiro.test(DFfishmeasure26$condition)
+# W = 0.89928, p-value = 0.03998 ## not normal
+
+shapiro.test(DFfishmeasure53$length_mm)
+# W = 0.97076, p-value = 0.9038  ## normal
+shapiro.test(DFfishmeasure53$weight_g)
+# W = 0.92431, p-value = 0.5036  ## normal
+shapiro.test(DFfishmeasure53$gut_g)
+# W = 0.94033, p-value = 0.6417  ## normal
+shapiro.test(DFfishmeasure53$gapetosnout_mm)
+# W = 0.92323, p-value = 0.4949  ## normal
+shapiro.test(DFfishmeasure53$vmo_mm)
+# W = 0.96283, p-value = 0.8426  ## normal
+shapiro.test(DFfishmeasure53$hmo_mm)
+# W = 0.94329, p-value = 0.6685  ## normal
+shapiro.test(DFfishmeasure53$stomach_fullness_index)
+# W = 0.84004, p-value = 0.09945  ## normal
+shapiro.test(DFfishmeasure53$heart_g)
+# W = 0.87912, p-value = 0.2226 ## normal
+shapiro.test(DFfishmeasure53$condition)
+# W = 0.88894, p-value = 0.2692 ## normal
+##As expected, because this event is one species, all data are normally distributed
+```
+
+Homogeneity of variance across locations
+
+```{r bartlett-locations, include=FALSE}
+##test for homoscedasticity (equal variance across groups)
+## If p-value >= 0.05, group measurements are homoscedastic, use var.equal=TRUE below
+
+bartlett.test(length_mm ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  length_mm by event
+# Bartlett's K-squared = 1.9928, df = 2, p-value = 0.3692
+
+bartlett.test(weight_g ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  weight_g by event
+# Bartlett's K-squared = 1.7247, df = 2, p-value = 0.4222
+
+bartlett.test(gut_g ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  gut_g by event
+# Bartlett's K-squared = 0.69009, df = 2, p-value = 0.7082
+
+bartlett.test(gapetosnout_mm ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  gapetosnout_mm by event
+# Bartlett's K-squared = 11.697, df = 2, p-value = 0.002884 ###NOT HOMOSCEDASTIC
+
+bartlett.test(vmo_mm ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  vmo_mm by event
+# Bartlett's K-squared = 11.243, df = 2, p-value = 0.003619 ###NOT HOMOSCEDASTIC
+
+
+bartlett.test(hmo_mm ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  hmo_mm by event
+# Bartlett's K-squared = 4.9901, df = 2, p-value = 0.08249
+
+bartlett.test(heart_g ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  heart_g by event
+# Bartlett's K-squared = 12.825, df = 2, p-value = 0.001641 ###NOT HOMOSCEDASTIC
+
+bartlett.test(condition ~ event, data = DFfishmeasure)
+# Bartlett test of homogeneity of variances
+# 
+# data:  condition by event
+# Bartlett's K-squared = 4.5018, df = 2, p-value = 0.1053
+```
+
+Check density and qqplots per species across locations to see if that data is normally distributed
+
+Density *C. gunnari*
+
+```{r density-location-ANI}
+## Checking density plots per event per species to see if that data is normally distributed
+
+####### Density Plots ANI Measurements -------
+denlenani <- ggplot(DFfishmeasureani, aes(x=length_cm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Length")
+denweiani <- ggplot(DFfishmeasureani, aes(x=weight_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Wet weight")
+dengutani <- ggplot(DFfishmeasureani, aes(x=gut_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight(wet)")
+deng2sani <- ggplot(DFfishmeasureani, aes(x=gapetosnout_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout length")
+denvmoani <- ggplot(DFfishmeasureani, aes(x=vmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening length")
+denhmoani <- ggplot(DFfishmeasureani, aes(x=hmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening length")
+densfiani <- ggplot(DFfishmeasureani, aes(x = stomach_fullness_index, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+denheaani <- ggplot(DFfishmeasureani, aes(x = heart_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+denconani <- ggplot(DFfishmeasureani, aes(x = condition, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (denlenani, denweiani, dengutani, deng2sani, denvmoani, denhmoani, densfiani, denheaani, denconani, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+```
+
+Density *G. gibberifrons*
+
+```{r density-location-NOG, warning=FALSE}
+## Checking density per event for G. gibb to see if that data is normally distributed
+####### Density Plots NOG Measurements-------
+denlennog <- ggplot(DFfishmeasurenog, aes(x=length_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Length")
+denweinog <- ggplot(DFfishmeasurenog, aes(x=weight_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Wet weight")
+dengutnog <- ggplot(DFfishmeasurenog, aes(x=gut_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight(wet)")
+deng2snog <- ggplot(DFfishmeasurenog, aes(x=gapetosnout_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout length")
+denvmonog <- ggplot(DFfishmeasurenog, aes(x=vmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening length")
+denhmonog <- ggplot(DFfishmeasurenog, aes(x=hmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening length")
+densfinog <- ggplot(DFfishmeasurenog, aes(x = stomach_fullness_index, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+denheanog <- ggplot(DFfishmeasurenog, aes(x = heart_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+denconnog <- ggplot(DFfishmeasurenog, aes(x = condition, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (denlennog, denweinog, dengutnog, deng2snog, denvmonog, denhmonog, densfinog, denheanog, denconnog, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+```
+
+Density all fish (both species) per location
+
+```{r density-location, warning=FALSE}
+###### Density Plots Fish Measurements-------
+denevenlen <- ggplot(DFfishmeasure, aes(x=length_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Length")
+denevenwei <- ggplot(DFfishmeasure, aes(x=weight_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Wet weight")
+denevengut <- ggplot(DFfishmeasure, aes(x=gut_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight(wet)")
+deneveng2s <- ggplot(DFfishmeasure, aes(x=gapetosnout_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout length")
+denevenvmo <- ggplot(DFfishmeasure, aes(x=vmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening length")
+denevenhmo <- ggplot(DFfishmeasure, aes(x=hmo_mm, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening length")
+denevensfi <- ggplot(DFfishmeasure, aes(x = stomach_fullness_index, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+denevenhea <- ggplot(DFfishmeasure, aes(x = heart_g, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+denevencon <- ggplot(DFfishmeasure, aes(x = condition, fill = event, colour = event)) +
+  geom_density(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (denevenlen, denevenwei, denevengut, deneveng2s, denevenvmo, denevenhmo, denevensfi, denevenhea, denevencon, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+```
+
+QQplots *C. gunnari*
+
+```{r qqplot-location-ANI, warning=FALSE}
+####### QQ plot ANI Measurements -------
+qqlenani <- ggplot(DFfishmeasureani, aes(sample=length_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Length")
+qqweiani <- ggplot(DFfishmeasureani, aes(sample=weight_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Weight(wet)")
+qqgutani <- ggplot(DFfishmeasureani, aes(sample=gut_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gut weight (wet)")
+qqg2sani <- ggplot(DFfishmeasureani, aes(sample=gapetosnout_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gape to Snout Length")
+qqvmoani <- ggplot(DFfishmeasureani, aes(sample=vmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Vertical mouth opening")
+qqhmoani <- ggplot(DFfishmeasureani, aes(sample=hmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Horizontal mouth opening")
+qqsfiani <- ggplot(DFfishmeasureani, aes(sample=stomach_fullness_index, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Stomach Fullness Index")
+qqheaani <- ggplot(DFfishmeasureani, aes(sample=heart_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Heart weight")
+qqconani <- ggplot(DFfishmeasureani, aes(sample=condition, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (qqlenani, qqweiani, qqgutani, qqg2sani, qqvmoani, qqhmoani, qqsfiani, qqheaani, qqconani, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+
+```
+
+QQplots *G. gibberifrons*
+
+```{r qqplot-locations-NOG, warning=FALSE}
+qqlennog <- ggplot(DFfishmeasurenog, aes(sample=length_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Length")
+qqweinog <- ggplot(DFfishmeasurenog, aes(sample=weight_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Weight(wet)")
+qqgutnog <- ggplot(DFfishmeasurenog, aes(sample=gut_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gut weight (wet)")
+qqg2snog <- ggplot(DFfishmeasurenog, aes(sample=gapetosnout_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gape to Snout Length")
+qqvmonog <- ggplot(DFfishmeasurenog, aes(sample=vmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Vertical mouth opening")
+qqhmonog <- ggplot(DFfishmeasurenog, aes(sample=hmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Horizontal mouth opening")
+qqsfinog <- ggplot(DFfishmeasurenog, aes(sample=stomach_fullness_index, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Stomach Fullness Index")
+qqheanog <- ggplot(DFfishmeasurenog, aes(sample=heart_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Heart weight")
+qqconnog <- ggplot(DFfishmeasurenog, aes(sample=condition, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (qqlennog, qqweinog, qqgutnog, qqg2snog, qqvmonog, qqhmonog, qqsfinog, qqheanog, qqconnog, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+```
+
+QQplots - both species (all fish) at each location
+
+```{r qqplots-locations, warning=FALSE, message=FALSE}
+qqevenlen <- ggplot(DFfishmeasure, aes(sample=length_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Length")
+qqevenwei <- ggplot(DFfishmeasure, aes(sample=weight_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Weight(wet)")
+qqevengut <- ggplot(DFfishmeasure, aes(sample=gut_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gut weight (wet)")
+qqeveng2s <- ggplot(DFfishmeasure, aes(sample=gapetosnout_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Gape to Snout Length")
+qqevenvmo <- ggplot(DFfishmeasure, aes(sample=vmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Vertical mouth opening")
+qqevenhmo <- ggplot(DFfishmeasure, aes(sample=hmo_mm, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Horizontal mouth opening")
+qqevensfi <- ggplot(DFfishmeasure, aes(sample=stomach_fullness_index, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Stomach Fullness Index")
+qqevenhea <- ggplot(DFfishmeasure, aes(sample=heart_g, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Heart weight")
+qqevencon <- ggplot(DFfishmeasure, aes(sample=condition, colour = factor(event))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (qqevenlen, qqevenwei, qqevengut, qqeveng2s, qqevenvmo, qqevenhmo, qqevensfi, qqevenhea, qqevencon, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+
+```
+
+Histogram all fish per location
+
+```{r histogram-locations, warning=FALSE, message=FALSE}
+
+## Set up multiple plots side by side with histogram to check for bell-shape
+hisevenlen <- ggplot(DFfishmeasure, aes(x = length_mm, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Length")
+hisevenwei <- ggplot(DFfishmeasure, aes(x = weight_g, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Weight (wet)")
+hisevengut <- ggplot(DFfishmeasure, aes(x = gut_g, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Gut weight (wet)")
+hiseveng2s <- ggplot(DFfishmeasure, aes(x = gapetosnout_mm, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Gape to snout")
+hisevenvmo <- ggplot(DFfishmeasure, aes(x = vmo_mm, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Vertical Mouth Opening")
+hisevenhmo <- ggplot(DFfishmeasure, aes(x = hmo_mm, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Horizontal Mouth Opening")
+hisevensfi <- ggplot(DFfishmeasure, aes(x = stomach_fullness_index, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Stomach Fullness Index")
+hisevenhea <- ggplot(DFfishmeasure, aes(x = heart_g, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Heart weight")
+hisevencon <- ggplot(DFfishmeasure, aes(x = condition, fill = event, colour = event)) +
+  geom_histogram(alpha = 0.5, position = "identity") +
+  ggtitle("Body condition (factor K)")
+
+ggarrange (hisevenlen, hisevenwei, hisevengut, hiseveng2s, hisevenvmo, hisevenhmo, hisevensfi, hisevenhea, hisevencon, ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", "I"), common.legend = TRUE, legend = "bottom")
+```
+
+Testing for differences amongst three groups, so One-way ANOVA for continuous, normal and homoscedastic = weight only; Kruskal-Wallis for non-normal data (no assumption of homogeneity) = length, gut weight, heart weight, gape to snout, vmo and hmo
+
+```{r ANOVA-KW-locationdifferences}
+summary(aov(DFfishmeasure$weight_g ~ DFfishmeasure$event))
+#                     Df Sum Sq Mean Sq F value Pr(>F)
+# DFfishmeasure$event  2   1666   833.1   0.675  0.515
+# Residuals           40  49391  1234.8
+## p > 0.05 supporting the null hypothesis that there is not a significant difference between these groups
+kruskal.test(DFfishmeasure$length_mm ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$length_mm by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 12.697, df = 2, p-value = 0.00175 ##DIFFERENT
+kruskal.test(DFfishmeasure$gut_g ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$gut_g by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 7.6357, df = 2, p-value = 0.02197 ##DIFFERENT
+
+kruskal.test(DFfishmeasure$heart_g ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$heart_g by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 5.5161, df = 2, p-value = 0.06342
+
+kruskal.test(DFfishmeasure$gapetosnout_mm ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$gapetosnout_mm by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 5.7273, df = 2, p-value = 0.05706
+
+kruskal.test(DFfishmeasure$vmo_mm ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$vmo_mm by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 18.342, df = 2, p-value = 0.000104 ##DIFFERENT
+
+kruskal.test(DFfishmeasure$hmo_mm ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$hmo_mm by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 14.669, df = 2, p-value = 0.0006526 ##DIFFERENT
+
+##I think Kruskal-Wallis will work on SFI also as it is discrete and ordinal
+kruskal.test(DFfishmeasure$stomach_fullness_index ~ DFfishmeasure$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFfishmeasure$stomach_fullness_index by DFfishmeasure$event
+# Kruskal-Wallis chi-squared = 2.9994, df = 2, p-value = 0.2232
+```
+
+Boxplots:
+
+```{r boxplots-fishmeasure-locations, warning=FALSE}
+
+## create labels
+
+species.labels <- c("C. gunnari", "G. gibberifrons")
+names(species.labels) <- c("ANI", "NOG")
+
+event.labels <- c("Southeast", "West", "Northwest")
+names(event.labels) <- c("13", "26", "53")
+
+
+######Are the fish measurements different across events - visual######
+##Boxplots fish measure comparing events
+
+boxeventlength <- 
+  ggplot(DFfishmeasure, aes(group = event, fill=event, ##group variables as factors
+                            y = length_mm, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Length (mm)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+boxeventweight <-
+ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                          y = weight_g, 
+                          factor(event,
+                                 labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Weight (g)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+boxeventgut <- 
+  ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                            y = gut_g, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Gut weight (g)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+bareventsfi <- 
+  ggplot(DFfishmeasure, aes(y = stomach_fullness_index))+
+  geom_bar(aes(fill=event), colour="black") + 
+  ylab("Stomach\nFullness Index\n(1 = empty - 4 = full)")+
+  xlab(NULL)+ ##count is obvious and looks better without
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+  )  
+
+boxeventhea <- 
+  ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                            y = heart_g, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Heart weight (g)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+boxeventg2s <- 
+  ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                            y = gapetosnout_mm, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Gape to snout\nlength (mm)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+boxeventvmo <- 
+  ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                            y = vmo_mm, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Vertical mouth\nopening (mm)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+
+boxeventhmo <- 
+  ggplot(DFfishmeasure, aes(group = event, fill = event, ##group variables as factors
+                            y = hmo_mm, 
+                            factor(event,
+                                   labels = event.labels))) + ##label event factors
+  geom_boxplot(color="black") + 
+  stat_summary(fun=mean, geom="point", shape=20, size=2.5, color="#BFD5E3") +
+  xlab(NULL)+ ##no x axis label as event already obvious
+  ylab('Horizontal mouth\nopening (mm)')+ ##y axis label
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.y = element_text(margin = margin(r = 10), size = rel(0.8)), ## increase space between axis labels and axis title
+    
+  )
+ggarrange (boxeventlength, boxeventweight, NULL, boxeventgut, bareventsfi, boxeventhea, boxeventg2s, boxeventvmo, boxeventhmo, ncol=3, nrow=3, labels = c("A","B","","C","D","E","F","G","H"), common.legend = TRUE, legend = "bottom")
+
+
+
+```
+
+Median IQR all fish at each location
+
+```{r medianIQR-fishmeasure-location, include=FALSE}
+
+## Report the median and IQR for the measurements
+## dataframe of medians and IQR per event per variable ignoring NA values
+fisheventmeasuremedians <- DFfishmeasure %>% group_by(event) %>% summarise(across(c(length_mm, weight_g, gut_g, gapetosnout_mm, vmo_mm, hmo_mm, stomach_fullness_index, heart_g, condition),.f = list(median = median, IQR = IQR), na.rm = TRUE))
+##view
+fisheventmeasuremedians
+##export
+write.csv(fisheventmeasuremedians, file = "./outputs/fisheventmeasuremedians.csv", row.names=FALSE)
+
+
+```
+
+Mean ±SD per species per location
+
+```{r fishmeasure-meansSD-species-location, include=FALSE}
+## dataframe of means and sd per species and event per variable ignoring NA values
+fishmeasuremeans_loc <- DFfishmeasure %>% group_by(species, event) %>% summarise(across(c(length_cm, weight_g, moutharea, gut_g, gapetosnout_mm, vmo_mm, hmo_mm, stomach_fullness_index, heart_g, condition),.f = list(mean = mean, sd = sd), na.rm = TRUE), .groups = 'drop')
+##view
+fishmeasuremeans_loc
+##export
+write.csv(fishmeasuremeans_loc, file = "./outputs/fishmeasuremeansloc.csv", row.names=FALSE)
+```
+
+Correlations between the various measures were also run. The whole fish measurement that correlates best with other measures and is most comparable across the two species and location was used as the measurement reflective of size and age.
+
+```{r correlations-measures, include=FALSE}
+
+## body wet weight and length
+lengthweightplot <- ggplot(DFfishmeasure, aes(x = length_mm, y = weight_g, color=species)) +
+  geom_point() +
+  labs(x="Length (mm)", y="Body weight (g)")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+lengthweightplotglm <- lengthweightplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$length_mm, DFfishmeasureani$weight_g)
+# t = 9.4043, df = 20, p-value = 8.796e-09 | 95 percent confidence interval: 0.7775200 0.9594039 | sample estimates: cor 0.903088  ##CORRELATED
+cor.test(DFfishmeasurenog$length_mm, DFfishmeasurenog$weight_g)
+# t = 10.427, df = 19, p-value = 2.674e-09 | 95 percent confidence interval:  0.8158879 0.9685501 | sample estimates: cor 0.9226204 
+
+## body wet weight and body condition
+weightbcplot <- ggplot(DFfishmeasure, aes(x = condition, y = weight_g, color=species)) +
+  geom_point() +
+  labs(x="Body condition K", y="Body weight (g)")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+weightbcplotglm <- weightbcplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$condition, DFfishmeasureani$weight_g)
+# t = 2.3535, df = 20, p-value = 0.02894 | 95 percent confidence interval:  0.05488002 0.74169134 | sample estimates: cor 0.4657129 ##CORRELATED
+cor.test(DFfishmeasurenog$condition, DFfishmeasurenog$weight_g)
+# t = 2.5034, df = 19, p-value = 0.02159 | 95 percent confidence interval:  0.08450768 0.76520124 | sample estimates: cor 0.498026 ##CORRELATED
+
+## body wet weight and gut weight
+weightgutplot <- ggplot(DFfishmeasure, aes(x = gut_g, y = weight_g, color=species)) +
+  geom_point() +
+  labs(x="Gut weight (g)", y="Body weight (g)")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+weightgutplotglm <- weightgutplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$gut_g, DFfishmeasureani$weight_g)
+# t = 2.6932, df = 20, p-value = 0.01398 | 95 percent confidence interval: 0.1204888 0.7700173 | sample estimates: cor 0.5158905 ##CORRELATED
+cor.test(DFfishmeasurenog$gut_g, DFfishmeasurenog$weight_g)
+
+##Relationship between heart wet weight and whole wet weight
+heart_weightplot <- ggplot(DFfishmeasure, aes(x = weight_g, y = heart_g, color=species)) +
+  geom_point() +
+  labs(x="Whole fish weight (g)", y="Heart weight (g)")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+heart_weightplotglm <- heart_weightplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$heart_g, DFfishmeasureani$weight_g)
+# t = 4.2174, df = 20, p-value = 0.0004232 | 95 percent confidence interval: 0.3721059 0.8591680 | sample estimates: cor 0.6860801 ##CORRELATED
+cor.test(DFfishmeasurenog$heart_g, DFfishmeasurenog$weight_g)
+# t = 4.1469, df = 18, p-value = 0.0006056 | 95 percent confidence interval:  0.3713352 0.8718386 | sample estimates: cor 0.6989947
+
+##Relationship between stomach fullness index and gut weight (standardised = normgut column)
+sfinormgutplot <- ggplot(DFfishmeasure, aes(x = normgut, y = stomach_fullness_index, color=species)) +
+  geom_point() +
+  labs(x="Standardised gut (gut weight / whole fish weight)", y="Stomach Fullness Index (1 = empty - 4 = full)")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+sfinormgutplotglm <- sfinormgutplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$normgut, DFfishmeasureani$weight_g)
+# t = -0.24663, df = 20, p-value = 0.8077 #NOT CORRELATED
+cor.test(DFfishmeasurenog$normgut, DFfishmeasurenog$weight_g)
+# t = -1.6528, df = 19, p-value = 0.1148 #NOT CORRELATED
+
+##Relationship between moutharea and body condition
+mabcplot <- ggplot(DFfishmeasure, aes(x = condition, y = moutharea, color=species)) +
+  geom_point() +
+  labs(x="Body condition K", y="Mouth Area")+
+  theme(legend.position = c(0.85, 0.85)) ##move the legend to top right inside plot
+mabcplotglm <- mabcplot + geom_smooth(method="glm")
+cor.test(DFfishmeasureani$condition, DFfishmeasureani$moutharea)
+# t = 0.08845, df = 20, p-value = 0.9304 ##NOT CORRELATED
+cor.test(DFfishmeasurenog$condition, DFfishmeasurenog$moutharea)
+# t = 0.53967, df = 19, p-value = 0.5957 ##NOT CORRELATED
+
+corrmeasuresplot <- ggarrange (lengthweightplotglm, weightbcplotglm, weightgutplotglm, heart_weightplotglm, sfinormgutplotglm, mabcplotglm, ncol=2, nrow=3, labels = c("A","B","C","D","E","F"), common.legend = TRUE, legend = "bottom")
+```
+
+```{r glm-measures-plot}
+corrmeasuresplot
+```
+
+# Plastics in fish
+
+## Plastic/composite particle size
+
+```{r fish particle size, include=FALSE}
+summary(DFparticlesfish$size_mm)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.03100 0.07125 0.09800 0.19362 0.15250 2.03800
+
+sd(DFparticlesfish$size_mm)
+# [1] 0.3539627
+```
+
+## Frequency of occurrence (FO)
+
+The frequency of occurrence (FO) of plastic or composite ingestion by fish per species and location was also calculated as the percentage of fish with at least one piece of plastic inside.
+
+Across all fish
+
+```{r FO-fish, include=FALSE}
+library(dplyr)
+#need plastic particles as factor for totals
+DFFO_fish <- DFsummarycombinedorig #create new DF
+DFFO_fish$total_plastic_particles <- as.factor(DFFO_fish$total_plastic_particles)
+DFFO_fish %>%
+  group_by(total_plastic_particles) %>%
+  summarise(n = n())
+# 0	24			
+# 1	9			
+# 2	9			
+# 5	1	
+
+## 19 fish with at least one plastic in and 43 fish in total
+
+FO_fish = (19/43)*100
+FO_fish
+# [1] 44.18605
+```
+
+Across *C. gunnari*
+
+```{r FO-ANI, include=FALSE}
+DFFO_ANI <- subset(DFFO_fish, species == "ANI")
+DFFO_ANI %>%
+  group_by(total_plastic_particles) %>%
+  summarise(n = n())
+# 0	11			
+# 1	3			
+# 2	7			
+# 5	1	
+FO_ANI = (11/22)*100
+FO_ANI
+# [1] 50
+```
+
+Across *G. gibberifrons*
+
+```{r FO-NOG, include=FALSE}
+DFFO_NOG <- subset(DFFO_fish, species == "NOG")
+DFFO_NOG %>%
+  group_by(total_plastic_particles) %>%
+  summarise(n = n())
+# 0	13			
+# 1	6			
+# 2	2	
+FO_NOG = (8/21)*100
+FO_NOG
+# [1] 38.09524
+```
+
+Across southeast location (13)
+
+```{r FO-13, include=FALSE}
+DFFO_13 <- subset(DFFO_fish, event == "13")
+DFFO_13 %>%
+  group_by(total_plastic_particles) %>%
+  summarise(n = n())
+# 0	7			
+# 1	4			
+# 2	4			
+# 5	1	
+FO_13 = (9/16)*100
+FO_13
+# [1] 56.25
+```
+
+Across west location (26)
+
+```{r FO-26, include=FALSE}
+DFFO_26 <- subset(DFFO_fish, event == "26")
+DFFO_26 %>%   
+  group_by(total_plastic_particles) %>%   
+  summarise(n = n())
+# 0	11			
+# 1	4			
+# 2	5
+FO_26 = (9/20)*100
+FO_26
+# [1] 45
+```
+
+Across northwest location (53)
+
+```{r FO-53, include=FALSE}
+DFFO_53 <- subset(DFFO_fish, event == "53")
+DFFO_53 %>%   
+  group_by(total_plastic_particles) %>%   
+  summarise(n = n())
+# 0	6			
+# 1	1
+FO_53 = (1/6)*100
+FO_53
+# [1] 16.66667
+
+```
+
+## Plastic loads (PL)
+
+The average (mean ± SD) amount of plastic or composite particles (of any size from macro- to micro-) per fish (plastic load -- PL) for each species and each location was calculated, including those fish where no plastic was present.
+
+dataframe of plastic load (means and sd) per species and event per variable ignoring NA values
+
+```{r PL species, include=FALSE}
+plasticloadspecies <- DFsummarycombinedorig %>% group_by(species) %>% summarise(across(c(14:39),.f = list(mean = mean, sd = sd), na.rm = TRUE))
+##view
+plasticloadspecies
+##export
+write.csv(plasticloadspecies, file = "./outputs/plasticloadspecies.csv", row.names=FALSE)
+```
+
+Plastic load per event
+
+```{r PL event, include=FALSE}
+plasticloadevent <- DFsummarycombinedorig %>% group_by(event) %>% summarise(across(c(14:39),.f = list(mean = mean, sd = sd), na.rm = TRUE))
+##view
+plasticloadevent
+##export
+write.csv(plasticloadevent, file = "./outputs/plasticloadevent.csv", row.names=FALSE)
+```
+
+Plastic load per event per species
+
+```{r PL per event and species, include=FALSE}
+plasticloadfish <- DFsummarycombinedorig %>% group_by(species, event) %>% summarise(across(c(13:38),.f = list(mean = mean, sd = sd), na.rm = TRUE))
+##view
+plasticloadfish
+##export
+write.csv(plasticloadfish, file = "./outputs/plasticloadfish.csv", row.names=FALSE)
+```
+
+Plastic load all fish
+
+```{r PL all fish, include=FALSE}
+plasticloadall <- DFsummarycombinedorig %>% summarise(across(c(15:40),.f = list(mean = mean, sd = sd), na.rm = TRUE))
+##view
+plasticloadall
+##export
+write.csv(plasticloadall, file = "./outputs/plasticloadall.csv", row.names=FALSE)
+```
+
+## Effect of location, species or morphometrics on plastic particle ingestion
+
+Effect of trawl location, species, weight, body condition and mouth area on plastic particle ingestion was looked at using Kruskal-Wallis and where results were significant, a Mann-Whitney U was carried out to identify the pairwise results.
+
+### Plastic load (individual) correlated with morphometrics
+
+Testing for normality (unlikely)
+
+```{r PL-morphometrics, warning=FALSE}
+
+##test for normality (unlikely)
+###### QQ plot ------
+qqtotalP <- ggplot(DFsummarycombinedorig, aes(sample=total_plastic_particles, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Total Plastic Particles")
+qqblackP <- ggplot(DFsummarycombinedorig, aes(sample=black, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Black plastic")
+qqblueP <- ggplot(DFsummarycombinedorig, aes(sample=blue, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Blue plastic")
+qqredP <- ggplot(DFsummarycombinedorig, aes(sample=red, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Red plastic")
+qqyellowP <- ggplot(DFsummarycombinedorig, aes(sample=yellow, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Yellow plastic")
+qqcolourlessP <- ggplot(DFsummarycombinedorig, aes(sample=colourless, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Colourless plastic")
+qqfragP <- ggplot(DFsummarycombinedorig, aes(sample=fragment_film_bead, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Fragment/Film/Bead")
+qqfibreP <- ggplot(DFsummarycombinedorig, aes(sample=fibre_rod, colour = factor(species))) +
+  stat_qq() +
+  stat_qq_line() +
+  ggtitle("Fibre/Rod")
+
+ggarrange (qqtotalP, qqblackP, qqblueP, qqredP, qqyellowP, qqcolourlessP, qqfragP, qqfibreP, "", ncol=3, nrow=3, labels = c("A","B","C","D","E","F", "G", "H", ""))
+```
+
+Not normal
+
+### Non-normal correlations with number of plastics against gut weight, whole weight, condition and mouth area
+
+#### Checking for correlation in mouth area and weight against particle size
+
+```{r correlations plastics morphometrics}
+##with whole fish weight
+cor.test(DFsummarycombinedorig$total_plastic_particles, DFsummarycombinedorig$weight_g, method="spearman")
+# Spearman's rank correlation rho
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles and DFsummarycombinedorig$weight_g
+# S = 15287, p-value = 0.3232
+# alternative hypothesis: true rho is not equal to 0
+# sample estimates:
+#       rho 
+# -0.154286
+
+## gut weight
+cor.test(DFsummarycombinedorig$total_plastic_particles, DFsummarycombinedorig$gut_g, method="spearman")
+
+# Spearman's rank correlation rho
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles and DFsummarycombinedorig$gut_g
+# S = 16713, p-value = 0.08971
+# alternative hypothesis: true rho is not equal to 0
+# sample estimates:
+#        rho 
+# -0.2619586
+
+## condition
+cor.test(DFsummarycombinedorig$total_plastic_particles, DFsummarycombinedorig$condition, method="spearman")
+# Spearman's rank correlation rho
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles and DFsummarycombinedorig$condition
+# S = 15252, p-value = 0.3318
+# alternative hypothesis: true rho is not equal to 0
+# sample estimates:
+#        rho 
+# -0.1515984 
+
+##mouth size
+cor.test(DFsummarycombinedorig$total_plastic_particles, DFsummarycombinedorig$moutharea, method="spearman")
+# Spearman's rank correlation rho
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles and DFsummarycombinedorig$moutharea
+# S = 11769, p-value = 0.4771
+# alternative hypothesis: true rho is not equal to 0
+# sample estimates:
+#       rho 
+# 0.1113681 
+```
+
+not correlated
+
+### Figure 21: MP size correlations with fish morphometrics
+
+```{r particle size correlation, include=FALSE}
+particle_size <- read.csv(file = "./data/weight_mouth_particlesize_correlation.csv")
+# particle_sizecat <- read.csv(file = "./data/weight_mouth_size_cat_correlation.csv")
+
+ggscatter(particle_size, x = "gut_weight", y = "size_mm")
+ggscatter(particle_size, x = "weight", y = "size_mm")
+ggscatter(particle_size, x = "moutharea", y = "size_mm")
+
+##remove outliers - the large 2mm particle to check the smaller data, but doesn't look like any correlation https://www.r-bloggers.com/2020/01/how-to-remove-outliers-in-r/
+boxplot(particle_size$size_mm, plot=FALSE)$out ##identify outliers 
+# [1] 2.038 0.363 0.342 0.337 0.516
+sizeoutliers <- boxplot(particle_size$size_mm, plot=FALSE)$out ##save outliers to a vector
+particle_size_nooutliers<-particle_size ##store "particle_size" separately to avoid destroying the dataset.
+particle_size_nooutliers<- particle_size_nooutliers[-which(particle_size_nooutliers$size_mm %in% sizeoutliers),] ##exclude "sizeoutliers" from the  dataset. The which() function tells us the rows in which the outliers exist, these rows are to be removed from our data set. 
+
+##change mouth area from mm to cm
+particle_size_nooutliers$ma_cm <- particle_size_nooutliers$moutharea / 100
+##round to one decimal place
+particle_size_nooutliers$ma_cm=round(particle_size_nooutliers$ma_cm,1)
+
+##check again
+spearman_gut_size <- ggscatter(particle_size_nooutliers, x = "gut_weight", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman",
+          xlab = "Fish gut weight (g)", ylab = "Particle Size (mm)")
+spearman_weight_size <- ggscatter(particle_size_nooutliers, x = "weight", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman",
+          xlab = "Whole fish weight (g)", ylab = "Particle Size (mm)")
+spearman_moutharea_size <- ggscatter(particle_size_nooutliers, x = "ma_cm", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman")+
+          xlab(bquote("Mouth area "(mm^2)))+ ##x axis label including superscript 2 for squared
+          ylab ("Particle Size (mm)")
+
+##and using Kendall's Tau
+ggscatter(particle_size_nooutliers, x = "gut_weight", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Fish gut weight (g)", ylab = "Particle Size (mm)")
+ggscatter(particle_size_nooutliers, x = "weight", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Whole fish weight (g)", ylab = "Particle Size (mm)")
+ggscatter(particle_size_nooutliers, x = "moutharea", y = "size_mm",
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Mouth Area (mm^2)", ylab = "Particle Size (mm)")
+
+## Patch visuals together (print to 1000,300 size) (library patchwork)
+spearmanpatchwork <- spearman_weight_size + spearman_gut_size + spearman_moutharea_size
+
+```
+
+```{r spearman_plot}
+spearmanpatchwork
+```
+
+Export plot at 1000 \* 300
+
+## Plastics type per species and location
+
+### Figure 22: microplastic counts in fish per polymer type, colour category, shape and size
+
+```{r plastics-types, include=FALSE}
+##Read in data in the form of polymer/colour/shape/size, species, and plastic or composite and total columns
+fish_species_polymer <- read.csv(file = "./data/samples_species_polymer.csv")
+##Read in colour data across species
+fish_species_colour <- read.csv(file = "./data/samples_species_colour.csv")
+##Read in shape data across species
+fish_species_shape <- read.csv(file = "./data/samples_species_shape.csv")
+##Read in size data across species
+fish_species_size <- read.csv(file = "./data/samples_species_size.csv")
+##Read in as above but location not species
+fish_location_polymer <- read.csv(file = "./data/samples_location_polymer.csv")
+##Read in colour data across location
+fish_location_colour <- read.csv(file = "./data/samples_location_colour.csv")
+##Read in shape data across location
+fish_location_shape <- read.csv(file = "./data/samples_location_shape.csv")
+##Read in size data across location
+fish_location_size <- read.csv(file = "./data/samples_location_size.csv")
+
+##summarise totals for each for the stack
+fish_species_polymer_totals <- fish_species_polymer %>% group_by(species) %>% summarise(total=sum(total))
+fish_species_colour_totals <- fish_species_colour %>% group_by(species) %>% summarise(total=sum(total))
+fish_species_shape_totals <- fish_species_shape %>% group_by(species) %>% summarise(total=sum(total))
+fish_species_size_totals <- fish_species_size %>% group_by(species) %>% summarise(total=sum(total))
+fish_location_polymer_totals <- fish_location_polymer %>% group_by(location) %>% summarise(total=sum(total))
+fish_location_colour_totals <- fish_location_colour %>% group_by(location) %>% summarise(total=sum(total))
+fish_location_shape_totals <- fish_location_shape %>% group_by(location) %>% summarise(total=sum(total))
+fish_location_size_totals <- fish_location_size %>% group_by(location) %>% summarise(total=sum(total))
+
+particlecolours <- c("#000000", "#2B59C3", "#820933", "#CCD7C5", "#EC9F05")
+
+## uses ggplot2, devtools to install patchwork, ggtext
+
+## Changed left hand side to not have any legends and all except bottom row to not have an x axis - re-add these elements if need individual plots (legend.position = "top" or "right") and scale x discrete labels from NULL to the commented out text below.  Also y title from right hand side (axis_title_y = element_blank() instead of markdown).  And using patchwork instead of ggarrange to line up more easily
+
+speciespolystack2 <-
+  ggplot(fish_species_polymer, aes(x = species, y = total, fill = polymer))+
+  geom_col(width = .5) +
+  geom_text(data=fish_species_polymer_totals, aes(x=species, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("C. gunnari - plastic", "C. gunnari - composite", "G. gibberifrons - plastic", "G. gibberifrons - composite"),
+                   labels = NULL
+                     # c("<i>C. gunnari</i><br>plastic","<i>C. gunnari</i><br>composite", "<i>G. gibberifrons</i><br>plastic","<i>G. gibberifrons</i><br>composite")
+                     )+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  ylim(0,15)+
+    
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_markdown(size = 12), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "none", legend.key.size = unit(0.5, 'cm'), legend.title = element_blank())
+  
+locationpolystack2 <-
+  ggplot(fish_location_polymer, aes(x = location, y = total, fill = polymer))+
+  geom_col(width = .5) +
+  geom_text(data=fish_location_polymer_totals, aes(x=location, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("Ev13 - plastic", "Ev13 - composite", "Ev26 - plastic", "Ev26 - composite", "Ev53 - plastic"),
+                   labels = NULL
+                     # c("Southeast<br>plastic","Southeast<br>composite", "West<br>plastic","West<br>composite", "Northwest<br>plastic")
+                   )+
+  ylim(0,15)+
+  labs(title = NULL, x = NULL, y = "Total particles", fill = "<b>Polymer</b>")+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_blank(), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "right", legend.key.size = unit(0.5, 'cm'), legend.title = element_markdown(size = 14))
+
+speciescolstack2 <-
+  ggplot(fish_species_colour, aes(x = species, y = total, fill = colour))+
+  geom_col(width = .5) +
+  geom_text(data=fish_species_colour_totals, aes(x=species, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_manual(values = particlecolours)+
+  scale_x_discrete(limit = c("C. gunnari - plastic", "C. gunnari - composite", "G. gibberifrons - plastic", "G. gibberifrons - composite"),
+                   labels = NULL
+                     # c("<i>C. gunnari</i><br>plastic","<i>C. gunnari</i><br>composite", "<i>G. gibberifrons</i><br>plastic","<i>G. gibberifrons</i><br>composite")
+                   )+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  ylim(0,15)+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_markdown(size = 12), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "none", legend.key.size = unit(0.5, 'cm'), legend.title = element_blank())
+
+locationcolstack2 <-
+  ggplot(fish_location_colour, aes(x = location, y = total, fill = colour))+
+  geom_col(width = .5) +
+  geom_text(data=fish_location_colour_totals, aes(x=location, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_manual(values = particlecolours)+
+  scale_x_discrete(limit = c("Ev13 - plastic", "Ev13 - composite", "Ev26 - plastic", "Ev26 - composite", "Ev53 - plastic"),
+                   labels = NULL
+                     # c("Southeast<br>plastic","Southeast<br>composite", "West<br>plastic","West<br>composite", "Northwest<br>plastic")
+                   )+
+  ylim(0,15)+
+  labs(title = NULL, x = NULL, y = "Total particles", fill = "<b>Colour</b>")+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_blank(), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "right", legend.key.size = unit(0.5, 'cm'), legend.title = element_markdown(size = 14))
+
+speciesshapstack2 <-
+  ggplot(fish_species_shape, aes(x = species, y = total, fill = shape))+
+  geom_col(width = .5) +
+  geom_text(data=fish_species_shape_totals, aes(x=species, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d(limit = c("Mini-fibre (MFB)","Mini-fragment (MFR)"), labels = c("Mini-<br>fibre<br>(MFB)","Mini-<br>fragment<br>(MFR)"))+
+  scale_x_discrete(limit = c("C. gunnari - plastic", "C. gunnari - composite", "G. gibberifrons - plastic", "G. gibberifrons - composite"),
+                   labels = NULL
+                     # c("<i>C. gunnari</i><br>plastic","<i>C. gunnari</i><br>composite", "<i>G. gibberifrons</i><br>plastic","<i>G. gibberifrons</i><br>composite")
+                   )+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  ylim(0,15)+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_markdown(size = 12), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "none", legend.key.size = unit(0.5, 'cm'), legend.title = element_blank())
+
+locationshapstack2 <-
+  ggplot(fish_location_shape, aes(x = location, y = total, fill = shape))+
+  geom_col(width = .5) +
+  geom_text(data=fish_location_shape_totals, aes(x=location, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d(limit = c("Mini-fibre (MFB)","Mini-fragment (MFR)"), labels = c("Mini-<br>fibre<br>(MFB)","Mini-<br>fragment<br>(MFR)"))+
+  scale_x_discrete(limit = c("Ev13 - plastic", "Ev13 - composite", "Ev26 - plastic", "Ev26 - composite", "Ev53 - plastic"),
+                   labels = NULL
+                     # c("Southeast<br>plastic","Southeast<br>composite", "West<br>plastic","West<br>composite", "Northwest<br>plastic")
+                     )+
+  ylim(0,15)+
+  labs(title = NULL, x = NULL, y = "Total particles", fill = "<b>Shape</b>")+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_blank(), axis.text.x = element_markdown(size = 12),legend.text = element_markdown(size = 12), legend.position = "right", legend.key.size = unit(0.5, 'cm'), legend.title = element_markdown(size = 14))
+
+speciessizestack2 <-
+  ggplot(fish_species_size, aes(x = species, y = total, fill = size))+
+  geom_col(width = .5) +
+  geom_text(data=fish_species_size_totals, aes(x=species, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("C. gunnari - plastic", "C. gunnari - composite", "G. gibberifrons - plastic", "G. gibberifrons - composite"),
+                   labels = c("<i>C. gunnari</i><br>plastic","<i>C. gunnari</i><br>composite", "<i>G. gibberifrons</i><br>plastic","<i>G. gibberifrons</i><br>composite")
+                     )+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  ylim(0,15)+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_markdown(size = 12), axis.text.x = element_markdown(size = 7),legend.text = element_markdown(size = 12), legend.position = "none", legend.key.size = unit(0.5, 'cm'), legend.title = element_blank())
+
+locationsizestack2 <-
+  ggplot(fish_location_size, aes(x = location, y = total, fill = size))+
+  geom_col(width = .5) +
+  geom_text(data=fish_location_size_totals, aes(x=location, label = total, fill = NULL), nudge_y = 1, size = 4)+
+  scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("Ev13 - plastic", "Ev13 - composite", "Ev26 - plastic", "Ev26 - composite", "Ev53 - plastic"),
+                   labels = c("Southeast<br>plastic","Southeast<br>composite", "West<br>plastic","West<br>composite", "Northwest<br>plastic"))+
+  ylim(0,15)+
+  labs(title = NULL, x = NULL, y = "Total particles", fill = "<b>Size (Âµm)</b>")+
+  theme(axis.text.y = element_markdown(size = 8), axis.title.y = element_blank(), axis.text.x = element_markdown(size = 8),legend.text = element_markdown(size = 12), legend.position = "right", legend.key.size = unit(0.5, 'cm'), legend.title = element_markdown(size = 14))
+
+## using patchwork (print as pdf as clearer - NB axis labels have been made smaller for this)
+Figure22 <- speciespolystack2 + locationpolystack2 + speciescolstack2 + locationcolstack2 + speciesshapstack2 + locationshapstack2 + speciessizestack2 + locationsizestack2 + plot_layout(ncol = 2) + plot_annotation(tag_levels = 'A')
+
+```
+
+```{r Figure22, warning=FALSE}
+Figure22
+```
+
+##### Testing idea of sig difference in particle size between locations
+
+In the MDS, locations and particle size showed no significant difference (R = 0.026 (P = 33.1%) but 26 and 13 were significantly different in pairwise ANOSIMS. The initial comparison may not be significant because of the one particle at 53 and it would be good to exclude possible species bias, even though these were not significant in the ANOSIMS. So, looking at ANI (n=10 and n=12 for West (26) and southeast (13) respectively) as these are most similar in fish numbers.
+
+```{r significance-ANI-particle-size-SEandW-sites, include=FALSE}
+
+##Subset from particle data C gunnari size data across locations 13 and 26
+##Initially remove event 53
+location13.26_size <- subset(DFparticlesfish, event != "53")
+##Then just include ANI as relatively equal numbers and excludes any species bias
+ANI_13.26_size <- subset(location13.26_size, species == "ANI")
+
+##Test for normality
+ANIsize <- hist(ANI_13.26_size$size_mm)
+
+##Unable to see due to outlier, only one MP and it's a fibre, so remove that one to check patterns
+ANI_13.26_size_FR <- subset(ANI_13.26_size, type == "MFR")
+
+##Test for normality in FR
+ANIsizeFR <- hist(ANI_13.26_size_FR$size_mm)
+
+##Per location
+ANIlocsizeFR <-
+  ggplot(ANI_13.26_size_FR, aes(x=size_mm))+
+  geom_histogram(aes(fill=event))
+
+ANIlocsizeFR
+
+##possibly, but test statistically using Shapiro-Wilks, more appropriate for small sample sizes (https://doi.org/10.4103%2Faca.ACA_157_18)
+shapiro.test(ANI_13.26_size_FR$size_mm)
+##Shapiro P< 0.05 statistically significant and therefore data were considered not normally distributed  
+
+##Homoscedastic?
+bartlett.test(size_mm ~ event, data = ANI_13.26_size_FR)
+## Also not homoescedastic (p=0.5)
+
+## Not normal therefore Wilcoxon
+wilcox.test(size_mm ~ event, data = ANI_13.26_size_FR)
+## P value >0.05 therefore not significantly different.
+
+```
+
+#### Table 9: Total particle count test for differences
+
+Looking at differences in median abundance across location, species weight, condition, mouth size and lab using the uncorrected data with Kruskal-wallis.
+
+```{r medians_IQR_for_KW, include=FALSE}
+
+## all fish
+summary(DFsummarycombinedorig$total_plastic_particles)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#  0.0000  0.0000  0.0000  0.7442  1.0000  5.0000
+
+## per species
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species == "ANI"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #  0.0     0.0     0.5     1.0     2.0     5.0 
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species == "NOG"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.4762  1.0000  2.0000 
+
+## per location
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$event == "13"])
+  #  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  # 0.000   0.000   1.000   1.062   2.000   5.000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$event == "26"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 0.00    0.00    0.00    0.70    1.25    2.00
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$event == "53"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.1429  0.0000  1.0000
+
+##per species and location
+##combine species and event and test for differences
+DFsummarycombinedorig$species.event <- paste(DFsummarycombinedorig$event,DFsummarycombinedorig$species)
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species.event == "13 ANI"])
+  #  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  # 0.000   0.000   0.500   1.167   2.000   5.000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species.event == "13 NOG"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 0.00    0.75    1.00    0.75    1.00    1.00
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species.event == "26 ANI"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 0.00    0.00    0.50    0.80    1.75    2.00
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$species.event == "26 NOG"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #  0.0     0.0     0.0     0.6     1.0     2.0
+
+## No need to do 53 NOG as same as 53 location one as only species at location
+
+##per weight category
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$weight_category == "28.5-64.9"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #    1       1       1       1       1       1 
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$weight_category == "64.9-101"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  1.0000  0.7143  1.0000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$weight_category == "101-137"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.6667  2.0000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$weight_category == "137-174"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #  0.0     0.0     0.0     1.0     1.5     5.0
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$weight_category == "174-210"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #    0       0       0       0       0       0
+
+##per mouth area category
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "1.31-3.72"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.5333  1.0000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "3.72-6.11"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.6667  1.0000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "6.11-8.51"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.6667  1.5000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "8.51-10.90"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #    5       5       5       5       5       5
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "10.90-13.30"])
+  #  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  # 1.000   1.500   2.000   1.667   2.000   2.000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$moutharea_category == "13.30-15.70"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #    0       0       0       0       0       0 
+
+##per body condition category
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$condition_category == "BCS1"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  1.0000  0.7143  1.0000  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$condition_category == "BCS2"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 0.00    0.00    0.50    0.80    1.75    2.00 
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$condition_category == "BCS3"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.9167  1.2500  5.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$condition_category == "BCS4"])
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.0000  0.0000  0.0000  0.6667  1.2500  2.0000
+
+summary(DFsummarycombinedorig$total_plastic_particles[DFsummarycombinedorig$condition_category == "BCS5"])
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   #    0       0       0       0       0       0
+```
+
+Kruskal-Wallis was used to compare the median microplastic ingestion across fish morphometrics (fish whole weight, body condition and mouth area categories - see Table 6).
+
+```{r Kruskal-wallis abundance}
+
+
+##Kruskal-Wallis to test differences in location, species, weight, condition, mouth size and lab on total particle counts using the raw data
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$event)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$event
+# Kruskal-Wallis chi-squared = 3.868, df = 2, p-value = 0.1446
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$species)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$species
+# Kruskal-Wallis chi-squared = 1.7897, df = 1, p-value = 0.181
+
+##two groups for species so test also with Mann Whitney
+wilcox.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$species)
+
+# Wilcoxon rank sum test with continuity correction
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$species
+# W = 280.5, p-value = 0.1854
+# alternative hypothesis: true location shift is not equal to 0
+
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$weight_category)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$weight_category
+# Kruskal-Wallis chi-squared = 2.406, df = 4, p-value = 0.6615
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$condition_category)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$condition_category
+# Kruskal-Wallis chi-squared = 1.6759, df = 4, p-value = 0.7951
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$moutharea_category)
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$moutharea_category
+# Kruskal-Wallis chi-squared = 9.9515, df = 5, p-value = 0.07662
+
+## if you haven't before, combine species and event and test for differences
+# DFsummarycombinedorig$species.event <- paste(DFsummarycombinedorig$event,DFsummarycombinedorig$species,"")
+
+kruskal.test(DFsummarycombinedorig$total_plastic_particles~DFsummarycombinedorig$species.event)
+
+# Kruskal-Wallis rank sum test
+# 
+# data:  DFsummarycombinedorig$total_plastic_particles by DFsummarycombinedorig$species.event
+# Kruskal-Wallis chi-squared = 4.1232, df = 4,
+# p-value = 0.3896
+
+##Also test related to microplastic load
+##create individual microplastic load (plastics/fish(1))
+DFsummarycombinedorig$pl <- DFsummarycombinedorig$total_plastic_particles / 1
+
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$event)
+# Kruskal-Wallis chi-squared = 3.868, df = 2, p-value = 0.1446
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$species)
+# Kruskal-Wallis chi-squared = 1.7897, df = 1, p-value = 0.18
+wilcox.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$species)
+# W = 280.5, p-value = 0.1854
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$species.event)
+# Kruskal-Wallis chi-squared = 4.1232, df = 4, p-value = 0.3896
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$weight_category)
+# Kruskal-Wallis chi-squared = 2.406, df = 4, p-value = 0.6615
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$condition_category)
+# Kruskal-Wallis chi-squared = 1.6759, df = 4, p-value = 0.7951
+kruskal.test(DFsummarycombinedorig$pl~DFsummarycombinedorig$moutharea_category)
+# Kruskal-Wallis chi-squared = 9.9515, df = 5, p-value = 0.07662
+```
+
+## Control Data
+
+Summary of control plastics: polymer, colour and shape
+
+Read in data in the form of polymer, control type and plastic or composite and total columns
+
+```{r readcontrol}
+controls_polymer <- read.csv(file = "./data/controls_polymer.csv")
+##Read in colour data across controls
+controls_colour <- read.csv(file = "./data/controls_colour.csv")
+##Read in shape data across controls
+controls_shape <- read.csv(file = "./data/controls_shape.csv")
+```
+
+```{r controltotals}
+controlparticle_totals <- controls_polymer %>% group_by(type) %>% summarise(total=sum(total))
+controlcolour_totals <- controls_colour %>% group_by(type) %>% summarise(total=sum(total))
+controlshape_totals <- controls_shape %>% group_by(type) %>% summarise(total=sum(total))
+```
+
+### Figure 18: Profile of plastics/composites found in controls
+
+Stacked bar chart (from <https://biostats.w.uib.no/stacking-data-series-in-bars/>)
+
+```{r control_stack}
+##polymer
+controlpolystack <- ggplot(controls_polymer, aes(x = type, y = total, fill = polymer))+
+  geom_col(width = .5) +
+  geom_text(data=controlparticle_totals, aes(x=type, label = total, fill = NULL), nudge_y = 1, size = 3)+
+  scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("Atmospheric Control - plastic", "Atmospheric Control - composite", "Procedural Control - plastic", "Procedural Control - composite"),
+                   labels = c("Atmospheric\nControl\nplastic","Atmospheric\nControl\ncomposite", "Procedural\nControl\nplastic","Procedural\nControl\ncomposite"))+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  theme(legend.position = "top", legend.title = element_blank())
+
+##colour
+particlecolours <- c("#000000", "#2B59C3", "#820933", "#98838F", "#CCD7C5", "#EC9F05")
+controlcolourstack <- ggplot(controls_colour, aes(x = type, y = total, fill = colour))+
+  geom_col(width = .5) +
+  geom_text(data=controlcolour_totals, aes(x=type, label = total, fill = NULL), nudge_y = 1, size = 3)+
+  scale_fill_manual(values = particlecolours)+
+    scale_x_discrete(limit = c("Atmospheric Control - plastic", "Atmospheric Control - composite", "Procedural Control - plastic", "Procedural Control - composite"),
+                     labels = c("Atmospheric\nControl\nplastic","Atmospheric\nControl\ncomposite", "Procedural\nControl\nplastic","Procedural\nControl\ncomposite"))+
+    labs(title = NULL, x = NULL, y = "Total particles")+
+    theme(legend.position = "top", legend.title = element_blank())
+
+##shape
+controlshapestack <- ggplot(controls_shape, aes(x = type, y = total, fill = shape))+
+  geom_col(width = .5) +
+  geom_text(data=controlshape_totals, aes(x=type, label = total, fill = NULL), nudge_y = 1, size = 3)+
+    scale_fill_viridis_d()+
+  scale_x_discrete(limit = c("Atmospheric Control - plastic", "Atmospheric Control - composite", "Procedural Control - plastic", "Procedural Control - composite"),
+                   labels = c("Atmospheric\nControl\nplastic","Atmospheric\nControl\ncomposite", "Procedural\nControl\nplastic","Procedural\nControl\ncomposite"))+
+  labs(title = NULL, x = NULL, y = "Total particles")+
+  theme(legend.position = "top", legend.title = element_blank())
+
+##arrange plots 3 columns
+ggarrange (controlpolystack, controlcolourstack, controlshapestack, nrow=1, ncol=3, labels = c("A","B","C"), common.legend = FALSE)
+
+## plot size = 1500 x 513
+```
+
+### Check for differences in total plastic particles across labs in control filter papers
+
+```{r control_lab_KW, include=FALSE}
+kruskal.test(DFcontrolsumm$total_plastic_particles~DFcontrolsumm$lab)
+# Kruskal-Wallis chi-squared = 3.1481, df = 2, p-value = 0.2072 ## No difference
+```
+
+## Other
+
+Plastics and composites related to library match percentage and polymer type
+
+#### Polymer per spectra match index
+
+stacked bar chart (from <https://biostats.w.uib.no/stacking-data-series-in-bars/>)
+
+```{r polymer per spectra bar}
+##load data file (possibly combine with particle data later to clean up)
+DFspectra_match <- read.csv(file = "./data/spectra_match.csv")
+
+legendtitlemps <- "Polymer"
+matchpolystack <- ggplot(DFspectra_match, aes(x = match, y = orig, fill = polymer))+
+  geom_col(width = .5) +
+  geom_text(aes(label = paste(type)), colour = "white", position = position_stack(vjust = 0.5))+
+  scale_fill_viridis_d(legendtitlemps)+
+  scale_y_continuous(breaks = c(1:11), limits = c(0,11))+
+  labs(title = NULL, x = "Spectra Match %", y = "Total particles")+
+  theme(legend.position = "top")
+
+legendtitlepms <- "Spectra Match %"
+polymatchstack <- ggplot(DFspectra_match, aes(x = polymer, y = orig, fill = match))+
+  geom_col(width = .5) +
+  geom_text(aes(label = paste(type)), colour = "white", position = position_stack(vjust = 0.5))+
+  scale_fill_viridis_d(legendtitlepms)+
+  scale_y_continuous(breaks = c(1:11), limits = c(0,11))+
+  labs(title = NULL, x = "Polymer", y = "Total particles")+
+  theme(legend.position = "top")
+
+
+ggarrange (matchpolystack, polymatchstack, nrow=1, ncol=2, labels = c("A","B"), common.legend = FALSE)
+```
+
+Looks like composite particles are much smaller than plastic?
+
+```{r histogram}
+ggplot(DFparticles, aes(x = size_mm))+
+  geom_histogram(aes(fill=plastic_composite)) +
+  ylab(NULL)+ ##count is obvious and looks better without
+  xlab("Particle size (mm)")+
+  theme(
+    axis.text.x = element_text(size = rel(0.8)),
+    axis.text.y = element_text(size = rel(0.8)),
+    axis.title.x = element_text(margin = margin(r = 10), size = rel(0.8)),## increase space between axis labels and axis title
+    legend.position = "top", legend.title=element_blank())+
+  scale_fill_viridis_d()
+```
+
+possibly an argument that identification relates to size due to clearer spectra, but only a few points scattered to the right, so not certain...box plot
+
+```{r box_plastic_composite_size}
+ggplot(DFparticles, aes(group = plastic_composite, fill = plastic_composite, ##group variables as factors
+                          y = size_mm, 
+                          factor(plastic_composite))) + 
+  geom_boxplot(aes()) + 
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('particle size (mm)')+ ##y axis label  
+  theme(
+    axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+    legend.position = "none"
+  )+
+  scale_fill_viridis_d()
+
+
+```
+
+The majority are all very small but whether there is a significant difference between the groups, is difficult to tell.
+
+```{r size_plastic_composite_diff}
+
+##subset plastics from DFparticles and composites
+
+DFparticlesplastic <- subset(DFparticles, plastic_composite == "Plastic")
+DFparticlescomposite <- subset(DFparticles, plastic_composite == "Composite")
+
+## Test for difference (non parametric two samples = Mann Whitney U)
+wilcox.test(DFparticlesplastic$size_mm, DFparticlescomposite$size_mm)
+
+
+```
+
+The size of plastic particles significantly differs from the size of composite particles W = 1350, p\<0.005
+
+Just fish particles:
+
+```{r size_plastic_composite_diff_digonly}
+
+##subset dig only from DFparticlesplastic and composites
+
+DFparticlesplasticdig<- subset(DFparticlesplastic, fp_type == "dig")
+DFparticlescompositedig <- subset(DFparticlescomposite, fp_type == "dig")
+
+## Test for difference (non parametric two samples = Mann Whitney U)
+wilcox.test(DFparticlesplasticdig$size_mm, DFparticlescompositedig$size_mm)
+
+
+```
+
+The particle size difference between plastic and composite particles found in fish is not significant
+
+Boxplot of the fish particles:
+
+```{r box_plastic_composite_size_fish}
+ggplot(DFparticlesfish, aes(group = plastic_composite, fill = plastic_composite, ##group variables as factors
+                          y = size_mm, 
+                          factor(plastic_composite))) + 
+  geom_boxplot(aes()) + 
+  xlab(NULL)+ ##no x axis label as species already obvious
+  ylab('particle size (mm)')+ ##y axis label  
+  theme(
+    axis.title.y = element_text(margin = margin(r = 10)), ## increase space between axis labels and axis title
+    legend.position = "none"
+  )+
+  scale_fill_viridis_d()
+
+
+```
+
+## Plastics in Control Papers
+
+```{r particle numbers on control papers}
+## Plastics in controls
+
+atmosfp <- c(26,143,52,18,102,16,73,28,2,147,13,82,3)
+
+summary(atmosfp)
+sd(atmosfp)
+IQR(atmosfp)
+
+procfp <- c(1,11,6,1,0,5,20,0,6,3,0,4,4,13,0,1,2,3,4,6,0,3,1,0)
+
+summary(procfp)
+sd(procfp)
+IQR(procfp)
+
+```
